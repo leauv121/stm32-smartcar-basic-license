@@ -1,0 +1,30 @@
+# Keil MDK build output and per-user state
+MDK-ARM/timer_pwm/
+MDK-ARM/*.uvoptx
+MDK-ARM/*.uvguix.*
+MDK-ARM/*.log
+MDK-ARM/*.lst
+
+# IAR build output and per-user state
+EWARM/Debug/
+EWARM/settings/
+
+# Generic embedded build products
+*.o
+*.d
+*.crf
+*.axf
+*.hex
+*.map
+*.lnp
+*.dep
+*.build_log.htm
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.bak
+*.tmp
+*~
