@@ -1,0 +1,12 @@
+---
+description: Require durable records and verification for substantial STM32 firmware changes
+alwaysApply: true
+---
+
+# 较大修改记录规范
+
+- 涉及多个文件、外设协作、中断、状态机、调度、故障排查或实车参数时，更新 `docs/changes/`。
+- 记录现象、复现数据、排查证据、根因、修改文件与符号、验证结果、实车待验证项。
+- 有可复用的 MCU 知识时，同时更新仓库内 `学习资料/课内/`。
+- 至少执行 Keil Rebuild；不得把“编译通过”写成“实车问题已解决”。
+- 修改前后检查 Git 状态和差异，完成后创建单一主题 commit 并推送。
