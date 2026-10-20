@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "adc.h"
+#include "dma.h"
 #include "i2c.h"
 #include "tim.h"
 #include "usart.h"
@@ -63,6 +64,15 @@ typedef enum
   POSE_COMPLETE
 } PoseTaskState;
 
+typedef enum
+{
+  ADC_ERROR_NONE = 0,
+  ADC_ERROR_CALIBRATION,
+  ADC_ERROR_START,
+  ADC_ERROR_DMA,
+  ADC_ERROR_RUNTIME
+} AdcErrorState;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -89,6 +99,13 @@ typedef enum
 
 /* 超声波避障总开关：0=完全静默，1=恢复初始化、测距和避障控制。 */
 #define ULTRASONIC_AVOIDANCE_ENABLE 0U
+
+/* 实验 10.4 模式：OLED 专用于显示电池与四路灰度传感器电压。 */
+#define ADC_EXPERIMENT_ENABLE 1U
+/* 当前实验不使用颜色识别，置 0 后不初始化、不读取、也不输出颜色数据。 */
+#define COLOR_SENSOR_ENABLE 0U
+#define ADC_CHANNEL_COUNT 5U
+#define ADC_DISPLAY_INTERVAL_MS 100U
 
 /* USER CODE END PD */
 
@@ -147,6 +164,9 @@ uint32_t last_pose_display_ms = 0U;
 uint32_t last_pose_uart_ms = 0U;
 uint32_t last_color_sample_ms = 0U;
 uint32_t last_color_uart_ms = 0U;
+uint32_t last_adc_display_ms = 0U;
+volatile uint16_t adc_dma_data[ADC_CHANNEL_COUNT] = {0U};
+volatile AdcErrorState adc_error_state = ADC_ERROR_NONE;
 static const uint8_t uart_direct_ack_message[] = "UART DIRECT ACK\r\n";
 /* USER CODE END PV */
 
@@ -162,8 +182,11 @@ static uint8_t Pose_Task_Is_Active(void);
 static void Pose_Task_Stop(void);
 static void Pose_Task_Update_Yaw(float current_yaw);
 static void Pose_Task_Process(void);
+#if !ADC_EXPERIMENT_ENABLE
 static void OLED_Show_Angle(uint8_t row, char *label, float angle);
 static void OLED_Update_Pose(void);
+#endif
+static void OLED_Update_ADC(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -526,6 +549,7 @@ static void Pose_Task_Process(void)
   }
 }
 
+#if !ADC_EXPERIMENT_ENABLE
 static void OLED_Show_Angle(uint8_t row, char *label, float angle)
 {
   int32_t angle_x10;
@@ -567,6 +591,52 @@ static void OLED_Update_Pose(void)
   OLED_ShowNum(40, 6, pose_turn_index, 2);
   OLED_ShowString(56, 6, "/12     ", 16);
 }
+#endif
+
+/*
+ * 实验 10.4 显示：Rank1 是电池，Rank2~Rank5 是四路 TCRT5000 AO。
+ * 传感器电压按 3.3V 参考电压换算；电池经过 1:1 分压，因此乘以 2。
+ */
+static void OLED_Update_ADC(void)
+{
+  char line[17];
+  float battery_voltage;
+  float sensor_voltage;
+  uint8_t index;
+
+  battery_voltage = ((float)adc_dma_data[0] / 4095.0f) * 3.3f * 2.0f + 0.02f;
+  (void)snprintf(line, sizeof(line), "BAT:%.2fV", battery_voltage);
+  OLED_ShowString(0, 0, "                ", 24);
+  OLED_ShowString(0, 0, line, 24);
+
+  for (index = 1U; index < ADC_CHANNEL_COUNT; index++)
+  {
+    sensor_voltage = ((float)adc_dma_data[index] / 4095.0f) * 3.3f;
+    (void)snprintf(line, sizeof(line), "S%u :%.2fV", index, sensor_voltage);
+    OLED_ShowString(0, index, "                ", 24);
+    OLED_ShowString(0, index, line, 24);
+  }
+
+  OLED_ShowString(0, 5, "                ", 24);
+  switch (adc_error_state)
+  {
+    case ADC_ERROR_NONE:
+      OLED_ShowString(0, 5, "ADC:OK", 24);
+      break;
+    case ADC_ERROR_CALIBRATION:
+      OLED_ShowString(0, 5, "ADC CAL ERR", 24);
+      break;
+    case ADC_ERROR_START:
+      OLED_ShowString(0, 5, "ADC START ERR", 24);
+      break;
+    case ADC_ERROR_DMA:
+      OLED_ShowString(0, 5, "ADC DMA ERR", 24);
+      break;
+    default:
+      OLED_ShowString(0, 5, "ADC RUN ERR", 24);
+      break;
+  }
+}
 
 
 /* USER CODE END 0 */
@@ -580,8 +650,6 @@ int main(void)
 
   /* USER CODE BEGIN 1 */
   uint8_t * usart3_rxbuffer_pointer; /* USART3 接收缓冲区首地址 */
-  uint16_t adc_value = 0U;           /* ADC1 通道3的原始转换结果，范围为0~4095 */
-  float voltage_value = 0.0f;        /* 根据分压比例还原出的实际电池电压 */
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -602,6 +670,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_USART3_UART_Init();
@@ -617,12 +686,6 @@ int main(void)
 	/* ===== 2. 串口接收和发送链路诊断 ===== */
 	usart3_rxbuffer_pointer = USART3_Get_RxBuffer_Pointer();
 	printf("READY\r\n");
-
-	/* STM32F1 在首次采样前执行一次 ADC 自校准，以减小转换偏差。 */
-	if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
-	{
-		printf("ADC CALIBRATION FAILED\r\n");
-	}
 
 	/* ===== 3. 轮速测量初始化 ===== */
 	Speed_MeasureInit();
@@ -641,9 +704,38 @@ int main(void)
 	
 /* ===== 5. OLED 初始化后先显示零角度，证明显示链路正常 ===== */
 OLED_Init();
+#if !ADC_EXPERIMENT_ENABLE
 OLED_Update_Pose();
+#endif
+
+/*
+ * 按指导书第 12~13 页的顺序启动 ADC：先 HAL_ADC_Start，随后启动 DMA。
+ * DMA 循环搬运五个 Rank：电池 IN3，以及 TCRT5000 的 IN6/IN7/IN8/IN9。
+ */
+if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
+{
+	adc_error_state = ADC_ERROR_CALIBRATION;
+	printf("ADC CALIBRATION FAILED\r\n");
+}
+else if (HAL_ADC_Start(&hadc1) != HAL_OK)
+{
+	adc_error_state = ADC_ERROR_START;
+	printf("ADC START FAILED\r\n");
+}
+else if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_dma_data,
+                           ADC_CHANNEL_COUNT) != HAL_OK)
+{
+	adc_error_state = ADC_ERROR_DMA;
+	printf("ADC DMA START FAILED\r\n");
+}
+else
+{
+	printf("ADC DMA START OK: BAT+S1+S2+S3+S4\r\n");
+}
+OLED_Update_ADC();
 
 /* ===== 6. 颜色传感器初始化；颜色仍参与红停、绿行控制 ===== */
+#if COLOR_SENSOR_ENABLE
 if (TCS34725_Init()) 
 {
 	printf("TCS34725 init success\n");
@@ -652,6 +744,7 @@ else
 {
 	printf("TCS34725 init failed\n");
 }
+#endif
 
 /* ===== 7. MPU6050 地址探测与 DMP 初始化 =====
  * 先探测 AD0=0 对应的 0x68，再探测 AD0=1 对应的 0x69。
@@ -664,11 +757,13 @@ if (mpu_detected_address == 0U)
 	mpu_init_result = 10U;
 	printf("MPU6050 not found at 0x68 or 0x69\r\n");
 
+	#if !ADC_EXPERIMENT_ENABLE
 	OLED_Clear();
 	OLED_ShowString(0, 0, "MPU NOT FOUND", 16);
 	OLED_ShowString(0, 2, "SCAN: 68 69", 16);
 	OLED_ShowString(0, 4, "PB6: SCL", 16);
 	OLED_ShowString(0, 6, "PB7: SDA", 16);
+	#endif
 }
 else
 {
@@ -678,7 +773,9 @@ else
 		init_flag = 1U;
 		printf("MPU6050 DMP init success at 0x%02X\r\n",
 		       mpu_detected_address);
+		#if !ADC_EXPERIMENT_ENABLE
 		OLED_Update_Pose();
+		#endif
 	}
 	else
 	{
@@ -687,6 +784,7 @@ else
 		       mpu_detected_address,
 		       mpu_init_result);
 
+		#if !ADC_EXPERIMENT_ENABLE
 		OLED_Clear();
 		OLED_ShowString(0, 0, "MPU6050 ERROR", 16);
 		OLED_ShowString(0, 2, "CODE:", 16);
@@ -696,6 +794,7 @@ else
 		                "FOUND: 0x69" : "FOUND: 0x68",
 		                16);
 		OLED_ShowString(0, 6, "DMP INIT FAIL", 16);
+		#endif
 	}
 }
 
@@ -705,6 +804,7 @@ last_pose_display_ms = last_mpu_poll_ms;
 last_pose_uart_ms = last_mpu_poll_ms;
 last_color_sample_ms = last_mpu_poll_ms;
 last_color_uart_ms = last_mpu_poll_ms;
+last_adc_display_ms = last_mpu_poll_ms;
 
 
 	
@@ -736,7 +836,9 @@ last_color_uart_ms = last_mpu_poll_ms;
 				    POSE_DISPLAY_INTERVAL_MS)
 				{
 					last_pose_display_ms = HAL_GetTick();
+					#if !ADC_EXPERIMENT_ENABLE
 					OLED_Update_Pose();
+					#endif
 				}
 
 				if ((HAL_GetTick() - last_pose_uart_ms) >=
@@ -749,33 +851,11 @@ last_color_uart_ms = last_mpu_poll_ms;
 			}
 		}
 
-    /* ===== B. USER 按键：只触发一次电池电压采样 ===== */
-    if (Key_Proc() == 1U)
-    {
-			/* 启动 ADC1，对 PA3 对应的 ADC1_IN3 进行一次转换。 */
-			if (HAL_ADC_Start(&hadc1) != HAL_OK)
-			{
-				printf("ADC START FAILED\r\n");
-			}
-			else if (HAL_ADC_PollForConversion(&hadc1, 10U) == HAL_OK)
-			{
-				/* 读取 12 位 ADC 结果，再按 1:1 分压电路还原电池实际电压。 */
-				adc_value = (uint16_t)HAL_ADC_GetValue(&hadc1);
-				voltage_value = ((float)adc_value / 4095.0f) * 3.3f * 2.0f + 0.02f;
-
-				/* 同时输出原始值和电压，方便与万用表读数比较和校准。 */
-				printf("Battery ADC:%u Voltage:%.2fV\r\n",
-				       adc_value,
-				       voltage_value);
-			}
-			else
-			{
-				/* 10 ms 内没有完成转换时给出提示，避免误把旧数据当成新结果。 */
-				printf("ADC CONVERSION TIMEOUT\r\n");
-			}
-
-			/* 单次转换结束后关闭 ADC，等待下一次按键再次触发。 */
-			(void)HAL_ADC_Stop(&hadc1);
+		/* ===== B. 实验 10.4：DMA 持续采样，OLED 每 100ms 刷新一次 ===== */
+		if ((HAL_GetTick() - last_adc_display_ms) >= ADC_DISPLAY_INTERVAL_MS)
+		{
+			last_adc_display_ms = HAL_GetTick();
+			OLED_Update_ADC();
 		}
 
 		/* ===== C. 串口命令：GO/STOP/LEFT/RIGHT/STATUS?/SPEED=xx ===== */
@@ -950,6 +1030,7 @@ last_color_uart_ms = last_mpu_poll_ms;
 
 		/* ===== G. 颜色识别：红色立即停车；绿色仅在姿态任务空闲时启动前进 ===== */
 		/* 其他颜色保持上一次有效状态，不覆盖按键、串口或姿态任务的决定。 */
+#if COLOR_SENSOR_ENABLE
 		if ((HAL_GetTick() - last_color_sample_ms) >= COLOR_SAMPLE_INTERVAL_MS)
 		{
 			uint8_t color_report_due;
@@ -1012,6 +1093,7 @@ last_color_uart_ms = last_mpu_poll_ms;
 				}
 			}
 		}
+#endif
 
 		/* ===== H. 统一输出：更新运行标志、状态灯和电机，避免各模块直接争抢电机 ===== */
 		start_flag = ((car_state != CAR_STOP) ||
@@ -1165,6 +1247,15 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
     if ((GPIO_Pin == MEMS_INT_Pin) && (init_flag == 1U))
     {
         mems_data_rdy_flag = 1U;
+    }
+}
+
+/* DMA/ADC 运行期出错时只置状态，主循环负责刷新 OLED，避免在中断中操作 I2C。 */
+void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
+{
+    if (hadc->Instance == ADC1)
+    {
+        adc_error_state = ADC_ERROR_RUNTIME;
     }
 }
 /* USER CODE END 4 */
