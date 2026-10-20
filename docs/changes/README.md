@@ -5,3 +5,4 @@
 ## 记录索引
 
 1. [2026-10-19：MPU6050 FIFO 实时性与姿态角少读问题](2026-10-19-mpu-fifo-realtime-fix.md)
+2. [2026-10-20：USER 按键触发单通道 ADC 电池电压采样](2026-10-20-button-adc-battery-sampling.md)

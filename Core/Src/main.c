@@ -19,6 +19,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "i2c.h"
 #include "tim.h"
 #include "usart.h"
@@ -76,7 +77,7 @@ typedef enum
 #define OBSTACLE_RESUME_DISTANCE_CM 40.0f
 #define POSE_TURN_INTERVAL_MS 1000U
 #define POSE_TURN_TARGET_DEG 90.0f
-/* 先保证 FIFO 实时性，再做物理标定；正常情况下不应靠比例系数补偿漏帧。 */
+/* 先保�? FIFO 实时性，再做物理标定；正常情况下不应靠比例系数补偿漏帧�?? */
 #define POSE_YAW_SCALE 1.0f
 #define POSE_YAW_DIRECTION -1.0f
 #define POSE_TOTAL_TURNS 12U
@@ -86,7 +87,7 @@ typedef enum
 #define COLOR_SAMPLE_INTERVAL_MS 60U
 #define COLOR_UART_REPORT_INTERVAL_MS 300U
 
-/* 超声波避障总开关：0=完全静默，1=恢复初始化、测距和避障控制。 */
+/* 超声波避障�?�开关：0=完全静默�?1=恢复初始化�?�测距和避障控制�? */
 #define ULTRASONIC_AVOIDANCE_ENABLE 0U
 
 /* USER CODE END PD */
@@ -105,7 +106,7 @@ volatile uint8_t control_tick_50ms = 0U;
 uint8_t measure_flag = 0U;
 uint8_t turn_count = 0U;
 uint8_t auto_enabled = 0U;
-/* 颜色识别始终运行，但复位后禁止绿色自行启动电机。 */
+/* 颜色识别始终运行，但复位后禁止绿色自行启动电机�?? */
 uint8_t color_control_armed = 0U;
 float front_distance = 0.0f;
 
@@ -146,7 +147,6 @@ uint32_t last_pose_display_ms = 0U;
 uint32_t last_pose_uart_ms = 0U;
 uint32_t last_color_sample_ms = 0U;
 uint32_t last_color_uart_ms = 0U;
-static const uint8_t uart_direct_test_message[] = "UART DIRECT TEST\r\n";
 static const uint8_t uart_direct_ack_message[] = "UART DIRECT ACK\r\n";
 /* USER CODE END PV */
 
@@ -159,7 +159,6 @@ static uint8_t Parse_Speed_Command(const char *command, uint8_t *speed_percent);
 static const char *Car_State_Text(void);
 static void UART_Send_Status(void);
 static uint8_t Pose_Task_Is_Active(void);
-static void Pose_Task_Start(void);
 static void Pose_Task_Stop(void);
 static void Pose_Task_Update_Yaw(float current_yaw);
 static void Pose_Task_Process(void);
@@ -172,7 +171,7 @@ static void OLED_Update_Pose(void);
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
 {
-	/* TIM1_CH4 原本用于 HC-SR04 回波捕获；关闭避障后不再处理该中断。 */
+	/* TIM1_CH4 原本用于 HC-SR04 回波捕获；关闭避障后不再处理该中断�?? */
 #if ULTRASONIC_AVOIDANCE_ENABLE
 	if ((htim == &htim1) &&
 	    (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4))
@@ -183,7 +182,7 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
 #endif
 	if (htim == &htim4)
 	{
-		/* TIM4_CH3/CH4 保留给左右轮测速。 */
+		/* TIM4_CH3/CH4 保留给左右轮测�?��?? */
 		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
 		{
 			Speed_MeasureTimIcHandler(TIM_CHANNEL_3);
@@ -252,7 +251,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 #endif
   if (htim->Instance == TIM3)
   {
-    /* TIM3 只产生灯光节拍标志，耗时工作放到主循环。 */
+    /* TIM3 只产生灯光节拍标志，耗时工作放到主循环�?? */
     tim3_flag = 1;
   }
 	else if (htim->Instance == TIM4)
@@ -408,27 +407,6 @@ static uint8_t Pose_Task_Is_Active(void)
           (pose_task_state == POSE_PAUSED_BY_OBSTACLE)) ? 1U : 0U;
 }
 
-static void Pose_Task_Start(void)
-{
-  if (init_flag != 1U)
-  {
-    printf("POSE START FAILED: MPU6050 NOT READY\r\n");
-    return;
-  }
-
-  auto_enabled = 0U;
-  measure_flag = 0U;
-  turn_count = 0U;
-  pose_turn_index = 0U;
-  pose_turn_progress = 0.0f;
-  pose_last_yaw = Yaw;
-  pose_yaw_valid = 1U;
-  pose_wait_started_ms = HAL_GetTick();
-  pose_task_state = POSE_WAITING;
-  car_state = CAR_STOP;
-  printf("POSE TASK START\r\n");
-}
-
 static void Pose_Task_Stop(void)
 {
   pose_task_state = POSE_IDLE;
@@ -442,7 +420,7 @@ static void Pose_Task_Update_Yaw(float current_yaw)
   float yaw_delta;
   float pose_target_progress;
 
-  /* 空闲或全部完成后只同步基准，不再累计任务角度。 */
+  /* 空闲或全部完成后只同步基准，不再累计任务角度�? */
   if ((pose_task_state == POSE_IDLE) ||
       (pose_task_state == POSE_COMPLETE))
   {
@@ -451,7 +429,7 @@ static void Pose_Task_Update_Yaw(float current_yaw)
     return;
   }
 
-  /* 第一次旋转前的 1 秒等待不属于转角；后续等待要统计停车惯性。 */
+  /* 第一次旋转前�? 1 秒等待不属于转角；后续等待要统计停车惯�?��?? */
   if ((pose_task_state == POSE_WAITING) &&
       (pose_turn_index == 0U))
   {
@@ -478,20 +456,20 @@ static void Pose_Task_Update_Yaw(float current_yaw)
   }
   pose_last_yaw = current_yaw;
 
-  /* 保留旋转方向：顺时针增加进度，反向回弹会抵消已经累计的角度。 */
+  /* 保留旋转方向：顺时针增加进度，反向回弹会抵消已经累计的角度�?? */
   pose_turn_progress += yaw_delta * POSE_YAW_DIRECTION * POSE_YAW_SCALE;
   if (pose_turn_progress < 0.0f)
   {
     pose_turn_progress = 0.0f;
   }
 
-  /* 等待或避障暂停期间只吸收惯性误差，不在此时完成下一段。 */
+  /* 等待或避障暂停期间只吸收惯�?�误差，不在此时完成下一段�?? */
   if (pose_task_state != POSE_ROTATING)
   {
     return;
   }
 
-  /* 使用整项任务的绝对累计目标：90、180、270……1080 度。 */
+  /* 使用整项任务的绝对累计目标：90�?180�?270…�??1080 度�?? */
   pose_target_progress = ((float)(pose_turn_index + 1U)) *
                          POSE_TURN_TARGET_DEG;
   if (pose_turn_progress >= pose_target_progress)
@@ -601,7 +579,9 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  uint8_t * usart3_rxbuffer_pointer;//usart3 
+  uint8_t * usart3_rxbuffer_pointer; /* USART3 ���ջ������׵�ַ */
+  uint16_t adc_value = 0U;           /* ADC1ͨ��3��ԭʼת���������ΧΪ0~4095 */
+  float voltage_value = 0.0f;        /* ���ݷ�ѹ������ԭ����ʵ�ʵ�ص�ѹ */
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -625,29 +605,32 @@ int main(void)
   MX_TIM2_Init();
   MX_TIM3_Init();
   MX_USART3_UART_Init();
-	(void)HAL_UART_Transmit(&huart3,
-	                       uart_direct_test_message,
-	                       sizeof(uart_direct_test_message) - 1U,
-	                       100U);
   MX_TIM4_Init();
   MX_TIM1_Init();
   MX_I2C1_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-	/* ===== 1. 执行机构和基础周期任务初始化 ===== */
+	/* ===== 1. 执行机构和基�?周期任务初始�? ===== */
 	TB6612_Init();	
 	HAL_TIM_Base_Start_IT(&htim3);
 
-	/* ===== 2. 串口接收和发送链路诊断 ===== */
+	/* ===== 2. 串口接收和发送链路诊�? ===== */
 	usart3_rxbuffer_pointer = USART3_Get_RxBuffer_Pointer();
 	printf("READY\r\n");
 
-	/* ===== 3. 轮速测量初始化 ===== */
+	/* STM32F1���״β���ǰִ��һ��ADC��У׼���Լ�Сת��ƫ� */
+	if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
+	{
+		printf("ADC CALIBRATION FAILED\r\n");
+	}
+
+	/* ===== 3. 轮�?�测量初始化 ===== */
 	Speed_MeasureInit();
 
 	/*
 	 * ===== 4. 超声波避障初始化 =====
 	 * 当前 ULTRASONIC_AVOIDANCE_ENABLE=0，模块保持静默：
-	 * 不启动 TIM1 捕获、不发送 TRIG、不读取距离，也不干预 car_state。
+	 * 不启�? TIM1 捕获、不发�?? TRIG、不读取距离，也不干�? car_state�?
 	 */
 #if ULTRASONIC_AVOIDANCE_ENABLE
 	HC_SR04Init(&htim1, TIM_CHANNEL_4);
@@ -656,11 +639,11 @@ int main(void)
 	obstacle_present = 0U;
 #endif
 	
-/* ===== 5. OLED 初始化后先显示零角度，证明显示链路正常 ===== */
+/* ===== 5. OLED 初始化后先显示零角度，证明显示链路正�? ===== */
 OLED_Init();
 OLED_Update_Pose();
 
-/* ===== 6. 颜色传感器初始化；颜色仍参与红停、绿行控制 ===== */
+/* ===== 6. 颜色传感器初始化；颜色仍参与红停、绿行控�? ===== */
 if (TCS34725_Init()) 
 {
 	printf("TCS34725 init success\n");
@@ -670,9 +653,9 @@ else
 	printf("TCS34725 init failed\n");
 }
 
-/* ===== 7. MPU6050 地址探测与 DMP 初始化 =====
- * 先探测 AD0=0 对应的 0x68，再探测 AD0=1 对应的 0x69。
- * 探测成功后，底层所有 MPU 读写都会自动使用找到的地址。
+/* ===== 7. MPU6050 地址探测�? DMP 初始�? =====
+ * 先探�? AD0=0 对应�? 0x68，再探测 AD0=1 对应�? 0x69�?
+ * 探测成功后，底层�?�? MPU 读写都会自动使用找到的地�?�?
  */
 mpu_detected_address = MPU6050_DetectAddress();
 if (mpu_detected_address == 0U)
@@ -716,7 +699,7 @@ else
 	}
 }
 
-/* 各周期任务从同一时间基准开始，避免初始化结束后集中触发。 */
+/* 各周期任务从同一时间基准�?始，避免初始化结束后集中触发�? */
 last_mpu_poll_ms = HAL_GetTick();
 last_pose_display_ms = last_mpu_poll_ms;
 last_pose_uart_ms = last_mpu_poll_ms;
@@ -733,10 +716,10 @@ last_color_uart_ms = last_mpu_poll_ms;
   while (1)
   {	
 		/*
-		 * ===== A. MPU6050 数据链 =====
-		 * PA8 外部中断只置位 mems_data_rdy_flag；主循环负责 IIC 读取。
-		 * 另外每 10ms 主动补读一次，防止中断边沿丢失或 INT 持续有效。
-		 * 姿态控制每帧更新，OLED 和串口按较低频率刷新，避免堵塞 FIFO。
+		 * ===== A. MPU6050 数据�? =====
+		 * PA8 外部中断只置�? mems_data_rdy_flag；主循环负责 IIC 读取�?
+		 * 另外�? 10ms 主动补读�?次，防止中断边沿丢失�? INT 持续有效�?
+		 * 姿�?�控制每帧更新，OLED 和串口按较低频率刷新，避免堵�? FIFO�?
 		 */
 		if ((init_flag == 1U) &&
 		    ((mems_data_rdy_flag == 1U) ||
@@ -766,32 +749,34 @@ last_color_uart_ms = last_mpu_poll_ms;
 			}
 		}
 
-    /* ===== B. USER 按键：启动或停止 12 次、每次 90 度的姿态任务 ===== */
+    /* ===== B. USER������ֻ����һ�ε�ص�ѹ���� ===== */
     if (Key_Proc() == 1U)
     {
-			if (Pose_Task_Is_Active() == 1U)
+			/* ����ADC1����PA3��Ӧ��ADC1_IN3����һ��ת���� */
+			if (HAL_ADC_Start(&hadc1) != HAL_OK)
 			{
-				/* USER 再次按下表示人工停止，同时撤销绿色前进授权。 */
-				color_control_armed = 0U;
-				Pose_Task_Stop();
-				printf("POSE TASK STOP\r\n");
+				printf("ADC START FAILED\r\n");
+			}
+			else if (HAL_ADC_PollForConversion(&hadc1, 10U) == HAL_OK)
+			{
+				/* ��ȡ12λADC������ٰ�1:1��ѹ��·��ԭ���ʵ�ʵ�ѹ�� */
+				adc_value = (uint16_t)HAL_ADC_GetValue(&hadc1);
+				voltage_value = ((float)adc_value / 4095.0f) * 3.3f * 2.0f + 0.02f;
+
+				/* ͬʱ���ԭʼֵ�͵�ѹ�����������ñ������ȽϺ�У׼�� */
+				printf("Battery ADC:%u Voltage:%.2fV\r\n",
+				       adc_value,
+				       voltage_value);
 			}
 			else
 			{
-				/* MPU 正常时，USER 启动属于一次明确的人工授权。 */
-				if (init_flag == 1U)
-				{
-					color_control_armed = 1U;
-				}
-				Pose_Task_Start();
+				/* 10ms��û�����ת��ʱ������ʾ��������Ѿ����ݵ����½���� */
+				printf("ADC CONVERSION TIMEOUT\r\n");
 			}
-			measure_flag = 0U;
-			turn_count = 0U;
-			time_count = 0U;
-			light_state = 1U;
-			UART_Send_Status();
-		}
 
+			/* ����ת��������ر�ADC���ȴ���һ�ΰ����ٴδ����� */
+			(void)HAL_ADC_Stop(&hadc1);
+		}
 		/* ===== C. 串口命令：GO/STOP/LEFT/RIGHT/STATUS?/SPEED=xx ===== */
 		if (USART3_Get_RxState() == 1U)
 		{
@@ -891,7 +876,7 @@ last_color_uart_ms = last_mpu_poll_ms;
 #endif
 		}
 
-		/* ===== E. 超声波避障：当前由总开关关闭，不测距、不打印、不干预姿态旋转 ===== */
+		/* ===== E. 超声波避障：当前由�?�开关关闭，不测距�?�不打印、不干预姿�?�旋�? ===== */
 #if ULTRASONIC_AVOIDANCE_ENABLE
 		if (measure_flag == 1U)
 		{
@@ -953,17 +938,17 @@ last_color_uart_ms = last_mpu_poll_ms;
 			turn_count = 0U;
 		}
 #else
-		/* 超声波避障当前关闭：持续清除残留状态，防止旧障碍标志让小车误停。 */
+		/* 超声波避障当前关闭：持续清除残留状�?�，防止旧障碍标志让小车误停�? */
 		measure_flag = 0U;
 		obstacle_present = 0U;
 		turn_count = 0U;
 #endif
 
-		/* ===== F. 姿态任务状态机：读取新 Yaw，完成每次 90 度旋转及 1 秒间隔 ===== */
+		/* ===== F. 姿�?�任务状态机：读取新 Yaw，完成每�? 90 度旋转及 1 秒间�? ===== */
 		Pose_Task_Process();
 
-		/* ===== G. 颜色识别：红色立即停车；绿色仅在姿态任务空闲时启动前进 ===== */
-		/* 其他颜色保持上一次有效状态，不覆盖按键、串口或姿态任务的决定。 */
+		/* ===== G. 颜色识别：红色立即停车；绿色仅在姿�?�任务空闲时启动前进 ===== */
+		/* 其他颜色保持上一次有效状态，不覆盖按键�?�串口或姿�?�任务的决定�? */
 		if ((HAL_GetTick() - last_color_sample_ms) >= COLOR_SAMPLE_INTERVAL_MS)
 		{
 			uint8_t color_report_due;
@@ -1004,7 +989,7 @@ last_color_uart_ms = last_mpu_poll_ms;
 						printf("Green\r\n");
 					}
 
-					/* 绿色只有在人工授权后才能启动前进，复位本身不构成授权。 */
+					/* 绿色只有在人工授权后才能启动前进，复位本身不构成授权�? */
 					if ((color_control_armed == 1U) &&
 					    (pose_task_state == POSE_IDLE))
 					{
@@ -1027,20 +1012,20 @@ last_color_uart_ms = last_mpu_poll_ms;
 			}
 		}
 
-		/* ===== H. 统一输出：更新运行标志、状态灯和电机，避免各模块直接争抢电机 ===== */
+		/* ===== H. 统一输出：更新运行标志�?�状态灯和电机，避免各模块直接争抢电�? ===== */
 		start_flag = ((car_state != CAR_STOP) ||
 		              (Pose_Task_Is_Active() == 1U)) ? 1U : 0U;
 		Light_Blink_Proc();
 		Car_Control();
 
-		/* ===== I. 轮速采样：只用于观察和串口诊断，不参与本轮姿态闭环 ===== */
+		/* ===== I. 轮�?�采样：只用于观察和串口诊断，不参与本轮姿�?�闭�? ===== */
 		if ((Speed_Measure_GetLeftDataState() == 1U) ||
 		    (Speed_Measure_GetRightDataState() == 1U))
 		{
 			float left_motor_speed = Speed_Measure_GetLeftData();
 			float right_motor_speed = Speed_Measure_GetRightData();
 
-			/* 原地转向时内侧轮理论速度按 0 显示，避免把静止轮的残余计数误认为运动。 */
+			/* 原地转向时内侧轮理论速度�? 0 显示，避免把静止轮的残余计数误认为运动�?? */
 			if (car_state == CAR_LEFT)
 			{
 				left_motor_speed = 0.0f;
@@ -1084,6 +1069,7 @@ void SystemClock_Config(void)
 {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
@@ -1110,6 +1096,12 @@ void SystemClock_Config(void)
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
   }
