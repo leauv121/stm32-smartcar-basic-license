@@ -4,6 +4,15 @@
 /* 四路循迹模块从右向左依次保存为 LINE1、LINE2、LINE3、LINE4。 */
 GPIO_PinState front_line[4] = {GPIO_PIN_RESET};
 
+/*
+ * 基础循迹实车调参：
+ * 直行和转弯外侧轮使用 4500；弱转弯内侧轮保留 2800，不再直接停轮，
+ * 用连续的双轮差速代替“走一下、停一下”，减小中间位置反复修正时的顿挫。
+ */
+#define TRACKING_OUTER_SPEED 4500U
+#define TRACKING_INNER_SPEED 2800U
+#define TRACKING_STOP_SPEED     0U
+
 /**
   * @brief  小车强左转
   * @param  None
@@ -11,8 +20,8 @@ GPIO_PinState front_line[4] = {GPIO_PIN_RESET};
   */
 void Smart_Car_Turn_Left(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT,0,0);
-  TB6612_SetSpeed(MOTOR_RIGHT,0,3800);
+  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_STOP_SPEED);
+  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_OUTER_SPEED);
 }
 
 /**
@@ -22,8 +31,9 @@ void Smart_Car_Turn_Left(void)
   */
 void Smart_Car_Turn_Left_Weak(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT,0,0);
-  TB6612_SetSpeed(MOTOR_RIGHT,0,3500);
+  /* 弱左转时两轮继续前进，只让左轮慢于右轮。 */
+  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_INNER_SPEED);
+  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_OUTER_SPEED);
 }
 
 /**
@@ -33,8 +43,8 @@ void Smart_Car_Turn_Left_Weak(void)
   */
 void Smart_Car_Turn_Right(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT,0,3800);
-  TB6612_SetSpeed(MOTOR_RIGHT,0,0);
+  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_OUTER_SPEED);
+  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_STOP_SPEED);
 }
 
 /**
@@ -44,8 +54,9 @@ void Smart_Car_Turn_Right(void)
   */
 void Smart_Car_Turn_Right_Weak(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT,0,3500);
-  TB6612_SetSpeed(MOTOR_RIGHT,0,0);
+  /* 弱右转时两轮继续前进，只让右轮慢于左轮。 */
+  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_OUTER_SPEED);
+  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_INNER_SPEED);
 }
 
 /**
@@ -55,8 +66,8 @@ void Smart_Car_Turn_Right_Weak(void)
   */
 void Smart_Car_Go_Straight(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT,0,4000);
-  TB6612_SetSpeed(MOTOR_RIGHT,0,4000);
+  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_OUTER_SPEED);
+  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_OUTER_SPEED);
 }
 
 /**
