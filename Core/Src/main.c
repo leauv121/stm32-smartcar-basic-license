@@ -120,7 +120,9 @@ typedef enum
 #define USART3_RX_BUFFER_NUM 64U
 
 volatile uint8_t control_tick_50ms = 0U;
-uint8_t measure_flag = 0U;
+volatile uint8_t measure_flag = 0U;
+/* 当前置 1：运行指导书第 11.2 节四路数字循迹实验。 */
+volatile uint8_t digital_tracking_experiment_enable = 1U;
 uint8_t turn_count = 0U;
 uint8_t auto_enabled = 0U;
 /* 颜色识别始终运行，但复位后禁止绿色自行启动电机。 */
@@ -649,7 +651,8 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-  uint8_t * usart3_rxbuffer_pointer; /* USART3 接收缓冲区首地址 */
+  uint8_t * usart3_rxbuffer_pointer = NULL; /* USART3 接收缓冲区首地址 */
+  uint8_t key_value = 0U;                  /* USER 按键返回值 */
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -670,17 +673,24 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_DMA_Init();
   MX_TIM2_Init();
-  MX_TIM3_Init();
-  MX_USART3_UART_Init();
-  MX_TIM4_Init();
-  MX_TIM1_Init();
-  MX_I2C1_Init();
-  MX_ADC1_Init();
+  if (digital_tracking_experiment_enable == 0U)
+  {
+    /* 非数字循迹模式才初始化原有 ADC、姿态、串口等外设。 */
+    MX_DMA_Init();
+    MX_TIM3_Init();
+    MX_USART3_UART_Init();
+    MX_TIM4_Init();
+    MX_TIM1_Init();
+    MX_I2C1_Init();
+    MX_ADC1_Init();
+  }
   /* USER CODE BEGIN 2 */
 	/* ===== 1. 执行机构和基础周期任务初始化 ===== */
-	TB6612_Init();	
+	TB6612_Init();
+
+	if (digital_tracking_experiment_enable == 0U)
+	{
 	HAL_TIM_Base_Start_IT(&htim3);
 
 	/* ===== 2. 串口接收和发送链路诊断 ===== */
@@ -805,6 +815,18 @@ last_pose_uart_ms = last_mpu_poll_ms;
 last_color_sample_ms = last_mpu_poll_ms;
 last_color_uart_ms = last_mpu_poll_ms;
 last_adc_display_ms = last_mpu_poll_ms;
+	}
+	else
+	{
+		/*
+		 * 指导书 11.2 基础实验只使用按键、四路 DO、TIM2 PWM 和 SysTick。
+		 * 上电先保持停车，等待 USER 按键启动循迹。
+		 */
+		start_flag = 0U;
+		measure_flag = 0U;
+		HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+		Smart_Car_Stop();
+	}
 
 
 	
@@ -814,7 +836,42 @@ last_adc_display_ms = last_mpu_poll_ms;
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
-  {	
+  {
+		if (digital_tracking_experiment_enable == 1U)
+		{
+			key_value = Key_Proc();
+
+			/* 按照指导书：每按一次 USER 键，在启动和停止之间切换。 */
+			if (key_value == 1U)
+			{
+				if (start_flag == 0U)
+				{
+					/* 小车启动：点亮板载状态灯，并先直行。 */
+					start_flag = 1U;
+					HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+					Smart_Car_Go_Straight();
+				}
+				else
+				{
+					/* 小车停止：熄灭板载状态灯并清除待处理的循迹标志。 */
+					start_flag = 0U;
+					measure_flag = 0U;
+					HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+					Smart_Car_Stop();
+				}
+			}
+
+			if ((start_flag == 1U) && (measure_flag == 1U))
+			{
+				/* SysTick 每 50 ms 置位一次，主循环负责执行具体循迹判断。 */
+				measure_flag = 0U;
+				Smart_Car_Automatic_Tracing();
+			}
+
+			/* 数字循迹模式不执行原有 ADC、颜色、姿态和超声波任务。 */
+			continue;
+		}
+
 		/*
 		 * ===== A. MPU6050 数据链 =====
 		 * PA8 外部中断只置位 mems_data_rdy_flag；主循环负责 IIC 读取。

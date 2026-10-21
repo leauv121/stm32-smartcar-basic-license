@@ -10,5 +10,6 @@ void Smart_Car_Turn_Right_Weak(void);
 void Smart_Car_Go_Straight(void);
 void Smart_Car_Go_Straight_Fast(void);
 void Smart_Car_Stop(void);
+void Smart_Car_Automatic_Tracing(void);
 
 #endif
