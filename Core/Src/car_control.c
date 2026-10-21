@@ -96,7 +96,19 @@ void Smart_Car_Automatic_Tracing(void)
   front_line[2] = HAL_GPIO_ReadPin(LINE3_GPIO_Port, LINE3_Pin);
   front_line[3] = HAL_GPIO_ReadPin(LINE4_GPIO_Port, LINE4_Pin);
 
-  if ((front_line[0] == GPIO_PIN_SET) &&
+  /*
+   * 实车验证补充的居中状态：
+   * 最右 LINE1 和最左 LINE4 位于白面，中间 LINE2、LINE3 同时压住黑线时，
+   * 说明黑线处于车体中央，应优先直行，避免弱左/弱右交替让车速变慢。
+   */
+  if ((front_line[0] == GPIO_PIN_RESET) &&
+      (front_line[1] == GPIO_PIN_SET) &&
+      (front_line[2] == GPIO_PIN_SET) &&
+      (front_line[3] == GPIO_PIN_RESET))
+  {
+    Smart_Car_Go_Straight();
+  }
+  else if ((front_line[0] == GPIO_PIN_SET) &&
       ((front_line[2] == GPIO_PIN_RESET) ||
        (front_line[3] == GPIO_PIN_RESET)))
   {
