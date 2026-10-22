@@ -42,8 +42,6 @@
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
 extern volatile uint8_t control_tick_50ms;
-extern volatile uint8_t measure_flag;
-extern volatile uint8_t digital_tracking_experiment_enable;
 
 /* USER CODE END PV */
 
@@ -64,8 +62,6 @@ extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart3;
 /* USER CODE BEGIN EV */
-extern volatile uint8_t init_flag;
-extern volatile uint8_t start_flag;
 
 /* USER CODE END EV */
 
@@ -193,7 +189,6 @@ void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
   static uint8_t sys_count = 0U;
-  static uint16_t led_count = 0U;
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
@@ -202,29 +197,6 @@ void SysTick_Handler(void)
   {
     sys_count = 0U;
     control_tick_50ms = 1U;
-
-    /* 按指导书要求：小车启动后，每 50 ms 请求执行一次循迹判断。 */
-    if ((digital_tracking_experiment_enable == 1U) && (start_flag == 1U))
-    {
-      measure_flag = 1U;
-    }
-  }
-
-  /* 数字循迹模式的 LED 由 USER 按键逻辑直接控制，不在中断中覆盖。 */
-  if ((digital_tracking_experiment_enable == 0U) &&
-      (init_flag == 1U) && (start_flag == 0U))
-  {
-    led_count++;
-    if (led_count >= 500U)
-    {
-      led_count = 0U;
-      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-    }
-  }
-  else if (digital_tracking_experiment_enable == 0U)
-  {
-    led_count = 0U;
-    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
   }
   /* USER CODE END SysTick_IRQn 1 */
 }

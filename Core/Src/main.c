@@ -2,17 +2,12 @@
 /**
   ******************************************************************************
   * @file           : main.c
-  * @brief    : Main program body
-	* @retval int  
+  * @brief          : PID循迹、姿态计圈与自动掉头主程序
   ******************************************************************************
   * @attention
   *
   * Copyright (c) 2026 STMicroelectronics.
   * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
   *
   ******************************************************************************
   */
@@ -31,39 +26,14 @@
 #include "tb6612.h"
 #include "key.h"
 #include "stdio.h"
-#include "string.h"
 #include "car_control.h"
-#include "speed_measure.h"
-#include "hc_sr04.h"
-#include "soft_i2c.h"
 #include "oled_driver.h"
-#include "tcs3472.h"
 #include "mpu6050.h"
 #include "mpu6050_dmp.h"
-
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef enum
-{
-  CAR_FORWARD = 0,
-  CAR_LEFT,
-  CAR_RIGHT,
-  CAR_BACKWARD,
-  CAR_AVOID_RIGHT,
-  CAR_STOP
-} CarState;
-
-typedef enum
-{
-  POSE_IDLE = 0,
-  POSE_WAITING,
-  POSE_ROTATING,
-  POSE_PAUSED_BY_OBSTACLE,
-  POSE_COMPLETE
-} PoseTaskState;
-
 typedef enum
 {
   ADC_ERROR_NONE = 0,
@@ -73,404 +43,148 @@ typedef enum
   ADC_ERROR_RUNTIME
 } AdcErrorState;
 
+typedef enum
+{
+  MPU_ERROR_NONE = 0,
+  MPU_ERROR_NOT_FOUND,
+  MPU_ERROR_DMP_INIT
+} MpuErrorState;
+
+typedef enum
+{
+  TRACK_WAIT_START = 0,
+  TRACK_CW,
+  TRACK_TURN_AROUND,
+  TRACK_CCW,
+  TRACK_COMPLETE,
+  TRACK_ERROR
+} TrackingMissionState;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
-#define PWM_PERIOD 7199U
-#define OBSTACLE_DISTANCE_CM 35.0f
-#define AVOID_TURN_TICKS 30U
-#define COLOR_MARGIN 20U
-#define COLOR_CLEAR_MIN 100U
-#define COLOR_FORWARD_SPEED_PERCENT 50U
-#define OBSTACLE_RESUME_DISTANCE_CM 40.0f
-#define POSE_TURN_INTERVAL_MS 1000U
-#define POSE_TURN_TARGET_DEG 90.0f
-/* 先保证 FIFO 实时性，再做物理标定；正常情况下不应靠比例系数补偿漏帧。 */
-#define POSE_YAW_SCALE 1.0f
-#define POSE_YAW_DIRECTION -1.0f
-#define POSE_TOTAL_TURNS 12U
-#define MPU_POLL_INTERVAL_MS 10U
-#define POSE_DISPLAY_INTERVAL_MS 200U
-#define POSE_UART_REPORT_INTERVAL_MS 200U
-#define COLOR_SAMPLE_INTERVAL_MS 60U
-#define COLOR_UART_REPORT_INTERVAL_MS 300U
-
-/* 超声波避障总开关：0=完全静默，1=恢复初始化、测距和避障控制。 */
-#define ULTRASONIC_AVOIDANCE_ENABLE 0U
-
-/* 实验 10.4 模式：OLED 专用于显示电池与四路灰度传感器电压。 */
-#define ADC_EXPERIMENT_ENABLE 1U
-/* 当前实验不使用颜色识别，置 0 后不初始化、不读取、也不输出颜色数据。 */
-#define COLOR_SENSOR_ENABLE 0U
-#define ADC_CHANNEL_COUNT 5U
-#define ADC_DISPLAY_INTERVAL_MS 100U
-
+#define ADC_CHANNEL_COUNT              2U
+#define MPU_POLL_INTERVAL_MS          10U
+#define TRACK_DISPLAY_INTERVAL_MS    200U
+#define TRACK_UART_INTERVAL_MS       200U
+#define TRACK_CW_TARGET_DEG        720.0f
+#define TRACK_TURN_TARGET_DEG      180.0f
+#define TRACK_CCW_TARGET_DEG       720.0f
+#define TRACK_YAW_DIRECTION         (-1.0f)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-
 /* USER CODE BEGIN PV */
-#define USART3_RX_BUFFER_NUM 64U
-
 volatile uint8_t control_tick_50ms = 0U;
-volatile uint8_t measure_flag = 0U;
-/* 当前置 1：运行指导书第 11.2 节四路数字循迹实验。 */
-volatile uint8_t digital_tracking_experiment_enable = 1U;
-uint8_t turn_count = 0U;
-uint8_t auto_enabled = 0U;
-/* 颜色识别始终运行，但复位后禁止绿色自行启动电机。 */
-uint8_t color_control_armed = 0U;
-float front_distance = 0.0f;
-
-
-uint8_t usart3_rx_temp;
-uint8_t usart3_rx_buffer[USART3_RX_BUFFER_NUM];
-volatile uint8_t usart3_rx_cmplt_flag = 0U;
-volatile uint16_t usart3_rx_count = 0U;
-
-uint8_t car_speed_percent = 50U;
-uint16_t car_speed_pwm = 3600U;
-uint8_t key_rval = 0U;
-volatile uint8_t tim3_flag = 0U;
-uint8_t time_count = 0U;
-uint8_t light_state = 1U;
-CarState car_state = CAR_STOP;
-
-COLOR_RGBC rgb; // RGB 
-COLOR_HSL hsl; // HSL 
-
 volatile uint8_t mems_data_rdy_flag = 0U;
 volatile uint8_t init_flag = 0U;
-volatile uint8_t start_flag = 0U;
-uint8_t mpu_init_result = 0xFFU;
-uint8_t mpu_detected_address = 0U;
-float Pitch = 0.0f;
-float Roll = 0.0f;
-float Yaw = 0.0f;
-PoseTaskState pose_task_state = POSE_IDLE;
-uint8_t pose_turn_index = 0U;
-uint8_t pose_yaw_valid = 0U;
-uint8_t obstacle_present = 0U;
-float pose_last_yaw = 0.0f;
-float pose_turn_progress = 0.0f;
-uint32_t pose_wait_started_ms = 0U;
-uint32_t last_mpu_poll_ms = 0U;
-uint32_t last_pose_display_ms = 0U;
-uint32_t last_pose_uart_ms = 0U;
-uint32_t last_color_sample_ms = 0U;
-uint32_t last_color_uart_ms = 0U;
-uint32_t last_adc_display_ms = 0U;
-volatile uint16_t adc_dma_data[ADC_CHANNEL_COUNT] = {0U};
+/* key.c 通过 extern 使用该值完成按键边沿检测。 */
+uint8_t key_rval = 0U;
+volatile uint16_t adc_dma_data[ADC_CHANNEL_COUNT] = {0U, 0U};
 volatile AdcErrorState adc_error_state = ADC_ERROR_NONE;
-static const uint8_t uart_direct_ack_message[] = "UART DIRECT ACK\r\n";
+
+static MpuErrorState mpu_error_state = MPU_ERROR_NONE;
+static TrackingMissionState tracking_state = TRACK_WAIT_START;
+static uint8_t adc_ready = 0U;
+static uint8_t mpu_ready = 0U;
+static uint8_t mpu_sample_valid = 0U;
+static uint8_t tracking_yaw_valid = 0U;
+static uint8_t mpu_detected_address = 0U;
+static uint8_t mpu_init_result = 0xFFU;
+static float Pitch = 0.0f;
+static float Roll = 0.0f;
+static float Yaw = 0.0f;
+static float tracking_last_yaw = 0.0f;
+static float tracking_progress = 0.0f;
+static uint32_t last_mpu_poll_ms = 0U;
+static uint32_t last_display_ms = 0U;
+static uint32_t last_uart_ms = 0U;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-static void Car_Control(void);
-static void Light_Blink_Proc(void);
-static uint8_t Parse_Speed_Command(const char *command, uint8_t *speed_percent);
-static const char *Car_State_Text(void);
-static void UART_Send_Status(void);
-static uint8_t Pose_Task_Is_Active(void);
-static void Pose_Task_Stop(void);
-static void Pose_Task_Update_Yaw(float current_yaw);
-static void Pose_Task_Process(void);
-#if !ADC_EXPERIMENT_ENABLE
-static void OLED_Show_Angle(uint8_t row, char *label, float angle);
-static void OLED_Update_Pose(void);
-#endif
-static void OLED_Update_ADC(void);
+static uint8_t Tracking_Mission_Is_Running(void);
+static void Tracking_Mission_Reset(void);
+static void Tracking_Mission_Start(void);
+static void Tracking_Mission_Update_Yaw(float current_yaw);
+static void Tracking_Mission_Process(uint8_t control_tick_due);
+static const char *Tracking_State_Text(void);
+static const char *Tracking_Error_Text(void);
+static void OLED_Update_Tracking_Mission(void);
+static void UART_Report_Tracking_Mission(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
+static uint8_t Tracking_Mission_Is_Running(void)
 {
-	/* TIM1_CH4 原本用于 HC-SR04 回波捕获；关闭避障后不再处理该中断。 */
-#if ULTRASONIC_AVOIDANCE_ENABLE
-	if ((htim == &htim1) &&
-	    (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4))
-	{
-		Hcsr04TimIcIsr();
-	}
-	else
-#endif
-	if (htim == &htim4)
-	{
-		/* TIM4_CH3/CH4 保留给左右轮测速。 */
-		if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3)
-		{
-			Speed_MeasureTimIcHandler(TIM_CHANNEL_3);
-		}
-		else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_4)
-		{
-			Speed_MeasureTimIcHandler(TIM_CHANNEL_4);
-		}
-	}
-}
-/**
-  * @brief  ????????????????USART3???????????????
-  * @param  None
-  * @retval None
-  * @note   ??????????????????????????????????,???????????????????
-  */
-void USART3_Start_Receive(void)
-{
-    memset(usart3_rx_buffer, 0, sizeof(usart3_rx_buffer));
-    usart3_rx_cmplt_flag = 0U;
-    usart3_rx_count = 0U;
-
-    HAL_UART_Receive_IT(&huart3, &usart3_rx_temp, 1U);
+  return ((tracking_state == TRACK_CW) ||
+          (tracking_state == TRACK_TURN_AROUND) ||
+          (tracking_state == TRACK_CCW)) ? 1U : 0U;
 }
 
 /**
-  * @brief  
-  * @param  
-  * @retval 
+  * @brief  停止当前任务并回到等待状态
+  * @note   USER按键停止时不会关闭ADC、DMA和MPU，便于继续观察数据。
   */
-uint16_t USART3_Get_Rx_Num(void)
+static void Tracking_Mission_Reset(void)
 {
-	return usart3_rx_count;
+  tracking_state = TRACK_WAIT_START;
+  tracking_progress = 0.0f;
+  tracking_last_yaw = Yaw;
+  tracking_yaw_valid = mpu_sample_valid;
+  Line_Following_PID_Reset();
+  Smart_Car_Stop();
+  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 }
 
 /**
-  * @brief  ???USART3??????????????'???
-  * @param  None
-  * @retval USART3??????????????'???
+  * @brief  从顺时针阶段开始完整实验任务
   */
-uint8_t * USART3_Get_RxBuffer_Pointer(void)
+static void Tracking_Mission_Start(void)
 {
-	USART3_Start_Receive();
-	return usart3_rx_buffer;
+  if ((adc_ready == 0U) ||
+      (mpu_ready == 0U) ||
+      (mpu_sample_valid == 0U) ||
+      (adc_error_state != ADC_ERROR_NONE) ||
+      (mpu_error_state != MPU_ERROR_NONE))
+  {
+    tracking_state = TRACK_ERROR;
+    Smart_Car_Stop();
+    return;
+  }
+
+  tracking_progress = 0.0f;
+  tracking_last_yaw = Yaw;
+  tracking_yaw_valid = 1U;
+  Line_Following_PID_Reset();
+  tracking_state = TRACK_CW;
+  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+  printf("TRACK MISSION START: CW 2 LAPS\r\n");
 }
 
 /**
-  * @brief  ???USART3??????
-  * @param  None
-  * @retval 0 ????????????????? 1 ??????????
+  * @brief  使用连续Yaw增量推进计圈和掉头状态
+  * @param  current_yaw DMP最新Yaw，范围约为-180到+180度
   */
-uint8_t USART3_Get_RxState(void)
-{
-	return usart3_rx_cmplt_flag;
-}
-
-
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-#if ULTRASONIC_AVOIDANCE_ENABLE
-  if (htim->Instance == TIM1)
-  {
-    Hcsr04TimOverflowIsr();
-  }
-  else
-#endif
-  if (htim->Instance == TIM3)
-  {
-    /* TIM3 只产生灯光节拍标志，耗时工作放到主循环。 */
-    tim3_flag = 1;
-  }
-	else if (htim->Instance == TIM4)
-	{
-		Speed_MeasureTimOverflowHandler();
-		
-	}
-	
-}
-
-static void Light_Blink_Proc(void)
-{
-  if (tim3_flag == 1)
-  {
-    tim3_flag = 0;
-    time_count++;
-
-    if ((car_state == CAR_LEFT ||
-         car_state == CAR_RIGHT ||
-         car_state == CAR_AVOID_RIGHT) &&
-        time_count >= 5)
-    {
-      time_count = 0;
-      light_state ^= 1;
-    }
-    else if (car_state == CAR_BACKWARD && time_count >= 3)
-    {
-      time_count = 0;
-      light_state ^= 1;
-    }
-  }
-}
-
-static void Car_Control(void)
-{
-  GPIO_PinState blink_output;
-
-  if (light_state == 1)
-  {
-    blink_output = GPIO_PIN_SET;
-  }
-  else
-  {
-    blink_output = GPIO_PIN_RESET;
-  }
-
-  if (car_state == CAR_FORWARD)
-  {
-    TB6612_SetSpeed(MOTOR_LEFT, 0, car_speed_pwm);
-    TB6612_SetSpeed(MOTOR_RIGHT, 0, car_speed_pwm);
-    HAL_GPIO_WritePin(LeftLight_GPIO_Port, LeftLight_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(RightLight_GPIO_Port, RightLight_Pin, GPIO_PIN_RESET);
-  }
-  else if (car_state == CAR_LEFT)
-  {
-    TB6612_SetSpeed(MOTOR_LEFT, 0, 0);
-    TB6612_SetSpeed(MOTOR_RIGHT, 0, car_speed_pwm);
-    HAL_GPIO_WritePin(LeftLight_GPIO_Port, LeftLight_Pin, blink_output);
-    HAL_GPIO_WritePin(RightLight_GPIO_Port, RightLight_Pin, GPIO_PIN_RESET);
-  }
-  else if ((car_state == CAR_RIGHT) || (car_state == CAR_AVOID_RIGHT))
-  {
-    TB6612_SetSpeed(MOTOR_LEFT, 0, car_speed_pwm);
-    TB6612_SetSpeed(MOTOR_RIGHT, 0, 0);
-    HAL_GPIO_WritePin(LeftLight_GPIO_Port, LeftLight_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(RightLight_GPIO_Port, RightLight_Pin, blink_output);
-  }
-  else if (car_state == CAR_BACKWARD)
-  {
-    TB6612_SetSpeed(MOTOR_LEFT, 1, car_speed_pwm);
-    TB6612_SetSpeed(MOTOR_RIGHT, 1, car_speed_pwm);
-    HAL_GPIO_WritePin(LeftLight_GPIO_Port, LeftLight_Pin, blink_output);
-    HAL_GPIO_WritePin(RightLight_GPIO_Port, RightLight_Pin, blink_output);
-  }
-  else if (car_state == CAR_STOP)
-  {
-    TB6612_SetSpeed(MOTOR_LEFT, 0, 0);
-    TB6612_SetSpeed(MOTOR_RIGHT, 0, 0);
-    HAL_GPIO_WritePin(LeftLight_GPIO_Port, LeftLight_Pin, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(RightLight_GPIO_Port, RightLight_Pin, GPIO_PIN_SET);
-  }
-}
-
-static uint8_t Parse_Speed_Command(const char *command, uint8_t *speed_percent)
-{
-  const char prefix[] = "SPEED=";
-  uint16_t value = 0U;
-  uint16_t index = sizeof(prefix) - 1U;
-
-  if (strncmp(command, prefix, sizeof(prefix) - 1U) != 0)
-  {
-    return 0U;
-  }
-
-  if (command[index] == '\0')
-  {
-    return 0U;
-  }
-
-  while (command[index] != '\0')
-  {
-    if ((command[index] < '0') || (command[index] > '9'))
-    {
-      return 0U;
-    }
-
-    value = (uint16_t)(value * 10U + (uint16_t)(command[index] - '0'));
-    if (value > 100U)
-    {
-      return 0U;
-    }
-    index++;
-  }
-
-  *speed_percent = (uint8_t)value;
-  return 1U;
-}
-
-static const char *Car_State_Text(void)
-{
-  if (car_state == CAR_FORWARD)
-  {
-    return "GOING_FORWARD";
-  }
-  if (car_state == CAR_LEFT)
-  {
-    return "TURNING_LEFT";
-  }
-  if (car_state == CAR_RIGHT)
-  {
-    return "TURNING_RIGHT";
-  }
-  if (car_state == CAR_BACKWARD)
-  {
-    return "GOING_BACKWARD";
-  }
-  if (car_state == CAR_AVOID_RIGHT)
-  {
-    return "AVOIDING_RIGHT";
-  }
-  return "STOPPED";
-}
-
-static void UART_Send_Status(void)
-{
-  printf("STATE:%s SPEED:%u\r\n", Car_State_Text(), car_speed_percent);
-}
-
-static uint8_t Pose_Task_Is_Active(void)
-{
-  return ((pose_task_state == POSE_WAITING) ||
-          (pose_task_state == POSE_ROTATING) ||
-          (pose_task_state == POSE_PAUSED_BY_OBSTACLE)) ? 1U : 0U;
-}
-
-static void Pose_Task_Stop(void)
-{
-  pose_task_state = POSE_IDLE;
-  pose_turn_progress = 0.0f;
-  pose_yaw_valid = 0U;
-  car_state = CAR_STOP;
-}
-
-static void Pose_Task_Update_Yaw(float current_yaw)
+static void Tracking_Mission_Update_Yaw(float current_yaw)
 {
   float yaw_delta;
-  float pose_target_progress;
+  float stage_delta;
 
-  /* 空闲或全部完成后只同步基准，不再累计任务角度。 */
-  if ((pose_task_state == POSE_IDLE) ||
-      (pose_task_state == POSE_COMPLETE))
+  if (tracking_yaw_valid == 0U)
   {
-    pose_last_yaw = current_yaw;
-    pose_yaw_valid = 1U;
+    tracking_last_yaw = current_yaw;
+    tracking_yaw_valid = 1U;
     return;
   }
 
-  /* 第一次旋转前的 1 秒等待不属于转角；后续等待要统计停车惯性。 */
-  if ((pose_task_state == POSE_WAITING) &&
-      (pose_turn_index == 0U))
-  {
-    pose_last_yaw = current_yaw;
-    pose_yaw_valid = 1U;
-    return;
-  }
-
-  if (pose_yaw_valid == 0U)
-  {
-    pose_last_yaw = current_yaw;
-    pose_yaw_valid = 1U;
-    return;
-  }
-
-  yaw_delta = current_yaw - pose_last_yaw;
+  yaw_delta = current_yaw - tracking_last_yaw;
   if (yaw_delta > 180.0f)
   {
     yaw_delta -= 360.0f;
@@ -479,168 +193,206 @@ static void Pose_Task_Update_Yaw(float current_yaw)
   {
     yaw_delta += 360.0f;
   }
-  pose_last_yaw = current_yaw;
+  tracking_last_yaw = current_yaw;
 
-  /* 保留旋转方向：顺时针增加进度，反向回弹会抵消已经累计的角度。 */
-  pose_turn_progress += yaw_delta * POSE_YAW_DIRECTION * POSE_YAW_SCALE;
-  if (pose_turn_progress < 0.0f)
-  {
-    pose_turn_progress = 0.0f;
-  }
-
-  /* 等待或避障暂停期间只吸收惯性误差，不在此时完成下一段。 */
-  if (pose_task_state != POSE_ROTATING)
+  if ((tracking_state == TRACK_WAIT_START) ||
+      (tracking_state == TRACK_COMPLETE) ||
+      (tracking_state == TRACK_ERROR))
   {
     return;
   }
 
-  /* 使用整项任务的绝对累计目标：90、180、270……1080 度。 */
-  pose_target_progress = ((float)(pose_turn_index + 1U)) *
-                         POSE_TURN_TARGET_DEG;
-  if (pose_turn_progress >= pose_target_progress)
+  stage_delta = yaw_delta * TRACK_YAW_DIRECTION;
+  if (tracking_state == TRACK_CCW)
   {
-    pose_turn_index++;
-    car_state = CAR_STOP;
+    stage_delta = -stage_delta;
+  }
 
-    if (pose_turn_index >= POSE_TOTAL_TURNS)
-    {
-      pose_task_state = POSE_COMPLETE;
-      printf("POSE TASK COMPLETE\r\n");
-    }
-    else
-    {
-      pose_wait_started_ms = HAL_GetTick();
-      pose_task_state = POSE_WAITING;
-      printf("POSE TURN:%u/%u\r\n", pose_turn_index, POSE_TOTAL_TURNS);
-    }
+  tracking_progress += stage_delta;
+  if (tracking_progress < 0.0f)
+  {
+    tracking_progress = 0.0f;
+  }
+
+  if ((tracking_state == TRACK_CW) &&
+      (tracking_progress >= TRACK_CW_TARGET_DEG))
+  {
+    Smart_Car_Stop();
+    Line_Following_PID_Reset();
+    tracking_state = TRACK_TURN_AROUND;
+    tracking_progress = 0.0f;
+    tracking_last_yaw = current_yaw;
+    printf("CW COMPLETE, TURN RIGHT 180 DEG\r\n");
+  }
+  else if ((tracking_state == TRACK_TURN_AROUND) &&
+           (tracking_progress >= TRACK_TURN_TARGET_DEG))
+  {
+    Smart_Car_Stop();
+    Line_Following_PID_Reset();
+    tracking_state = TRACK_CCW;
+    tracking_progress = 0.0f;
+    tracking_last_yaw = current_yaw;
+    printf("TURN COMPLETE, CCW 2 LAPS\r\n");
+  }
+  else if ((tracking_state == TRACK_CCW) &&
+           (tracking_progress >= TRACK_CCW_TARGET_DEG))
+  {
+    Smart_Car_Stop();
+    Line_Following_PID_Reset();
+    tracking_state = TRACK_COMPLETE;
+    tracking_progress = TRACK_CCW_TARGET_DEG;
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+    printf("TRACK MISSION COMPLETE\r\n");
   }
 }
 
-static void Pose_Task_Process(void)
+/**
+  * @brief  单一电机控制出口：PID循迹、右转掉头或停车
+  * @param  control_tick_due 50ms控制节拍到达标志
+  */
+static void Tracking_Mission_Process(uint8_t control_tick_due)
 {
-  if ((pose_task_state == POSE_WAITING) &&
-      ((HAL_GetTick() - pose_wait_started_ms) >= POSE_TURN_INTERVAL_MS))
+  if ((adc_error_state != ADC_ERROR_NONE) ||
+      (mpu_error_state != MPU_ERROR_NONE))
   {
-    if (obstacle_present == 1U)
-    {
-      pose_task_state = POSE_PAUSED_BY_OBSTACLE;
-      car_state = CAR_STOP;
-    }
-    else
-    {
-      pose_last_yaw = Yaw;
-      pose_yaw_valid = 1U;
-      pose_task_state = POSE_ROTATING;
-      car_state = CAR_RIGHT;
-    }
+    tracking_state = TRACK_ERROR;
   }
-  else if (pose_task_state == POSE_PAUSED_BY_OBSTACLE)
+
+  switch (tracking_state)
   {
-    car_state = CAR_STOP;
-    if (obstacle_present == 0U)
-    {
-      pose_last_yaw = Yaw;
-      pose_yaw_valid = 1U;
-      pose_task_state = POSE_ROTATING;
-      car_state = CAR_RIGHT;
-    }
-  }
-  else if (pose_task_state == POSE_ROTATING)
-  {
-    car_state = CAR_RIGHT;
+    case TRACK_CW:
+    case TRACK_CCW:
+      if (control_tick_due == 1U)
+      {
+        uint16_t left_adc = adc_dma_data[0];
+        uint16_t right_adc = adc_dma_data[1];
+        Line_Following_PID(left_adc, right_adc);
+      }
+      break;
+
+    case TRACK_TURN_AROUND:
+      Smart_Car_Turn_Right();
+      break;
+
+    case TRACK_WAIT_START:
+    case TRACK_COMPLETE:
+    case TRACK_ERROR:
+    default:
+      Smart_Car_Stop();
+      break;
   }
 }
 
-#if !ADC_EXPERIMENT_ENABLE
-static void OLED_Show_Angle(uint8_t row, char *label, float angle)
+static const char *Tracking_State_Text(void)
 {
-  int32_t angle_x10;
-  uint32_t magnitude;
-
-  if (angle >= 0.0f)
+  switch (tracking_state)
   {
-    angle_x10 = (int32_t)(angle * 10.0f + 0.5f);
+    case TRACK_CW:
+      return "CW";
+    case TRACK_TURN_AROUND:
+      return "TURN";
+    case TRACK_CCW:
+      return "CCW";
+    case TRACK_COMPLETE:
+      return "DONE";
+    case TRACK_ERROR:
+      return "ERR";
+    case TRACK_WAIT_START:
+    default:
+      return "WAIT";
   }
-  else
-  {
-    angle_x10 = (int32_t)(angle * 10.0f - 0.5f);
-  }
-
-  if (angle_x10 > 9999)
-  {
-    angle_x10 = 9999;
-  }
-  else if (angle_x10 < -9999)
-  {
-    angle_x10 = -9999;
-  }
-
-  OLED_ShowString(0, row, label, 16);
-  OLED_ShowChar(48, row, (angle_x10 < 0) ? '-' : '+', 16);
-  magnitude = (angle_x10 < 0) ? (uint32_t)(-angle_x10) : (uint32_t)angle_x10;
-  OLED_ShowNum(56, row, magnitude / 10U, 3);
-  OLED_ShowChar(80, row, '.', 16);
-  OLED_ShowNum(88, row, magnitude % 10U, 1);
-  OLED_ShowString(96, row, "    ", 16);
 }
 
-static void OLED_Update_Pose(void)
+static const char *Tracking_Error_Text(void)
 {
-  OLED_Show_Angle(0, "PITCH:", Pitch);
-  OLED_Show_Angle(2, "ROLL :", Roll);
-  OLED_Show_Angle(4, "YAW  :", Yaw);
-  OLED_ShowString(0, 6, "TURN:", 16);
-  OLED_ShowNum(40, 6, pose_turn_index, 2);
-  OLED_ShowString(56, 6, "/12     ", 16);
-}
-#endif
-
-/*
- * 实验 10.4 显示：Rank1 是电池，Rank2~Rank5 是四路 TCRT5000 AO。
- * 传感器电压按 3.3V 参考电压换算；电池经过 1:1 分压，因此乘以 2。
- */
-static void OLED_Update_ADC(void)
-{
-  char line[17];
-  float battery_voltage;
-  float sensor_voltage;
-  uint8_t index;
-
-  battery_voltage = ((float)adc_dma_data[0] / 4095.0f) * 3.3f * 2.0f + 0.02f;
-  (void)snprintf(line, sizeof(line), "BAT:%.2fV", battery_voltage);
-  OLED_ShowString(0, 0, "                ", 24);
-  OLED_ShowString(0, 0, line, 24);
-
-  for (index = 1U; index < ADC_CHANNEL_COUNT; index++)
-  {
-    sensor_voltage = ((float)adc_dma_data[index] / 4095.0f) * 3.3f;
-    (void)snprintf(line, sizeof(line), "S%u :%.2fV", index, sensor_voltage);
-    OLED_ShowString(0, index, "                ", 24);
-    OLED_ShowString(0, index, line, 24);
-  }
-
-  OLED_ShowString(0, 5, "                ", 24);
   switch (adc_error_state)
   {
-    case ADC_ERROR_NONE:
-      OLED_ShowString(0, 5, "ADC:OK", 24);
-      break;
     case ADC_ERROR_CALIBRATION:
-      OLED_ShowString(0, 5, "ADC CAL ERR", 24);
-      break;
+      return "ADC CAL ERR";
     case ADC_ERROR_START:
-      OLED_ShowString(0, 5, "ADC START ERR", 24);
-      break;
+      return "ADC START ERR";
     case ADC_ERROR_DMA:
-      OLED_ShowString(0, 5, "ADC DMA ERR", 24);
-      break;
+      return "ADC DMA ERR";
+    case ADC_ERROR_RUNTIME:
+      return "ADC RUN ERR";
+    case ADC_ERROR_NONE:
     default:
-      OLED_ShowString(0, 5, "ADC RUN ERR", 24);
       break;
   }
+
+  if (mpu_error_state == MPU_ERROR_NOT_FOUND)
+  {
+    return "MPU NOT FOUND";
+  }
+  if (mpu_error_state == MPU_ERROR_DMP_INIT)
+  {
+    return "DMP INIT FAIL";
+  }
+  return "NO ERROR";
 }
 
+/**
+  * @brief  低频刷新OLED；固定宽度覆盖旧内容，不在高优先级路径清屏
+  */
+static void OLED_Update_Tracking_Mission(void)
+{
+  char line[17];
+  int32_t yaw_x10;
+  uint32_t yaw_magnitude;
+  uint32_t target_deg;
+  uint32_t progress_deg;
 
+  if (tracking_state == TRACK_ERROR)
+  {
+    OLED_ShowString(0, 0, "TRACK ERROR     ", 16);
+    (void)snprintf(line, sizeof(line), "%-16s", Tracking_Error_Text());
+    OLED_ShowString(0, 2, line, 16);
+    OLED_ShowString(0, 4, "MOTOR STOP      ", 16);
+    OLED_ShowString(0, 6, "CHECK WIRING    ", 16);
+    return;
+  }
+
+  (void)snprintf(line, sizeof(line), "MODE:%-11s", Tracking_State_Text());
+  OLED_ShowString(0, 0, line, 16);
+  (void)snprintf(line, sizeof(line), "L:%4u R:%4u   ",
+                 adc_dma_data[0], adc_dma_data[1]);
+  OLED_ShowString(0, 2, line, 16);
+
+  target_deg = (tracking_state == TRACK_TURN_AROUND) ?
+               (uint32_t)TRACK_TURN_TARGET_DEG :
+               (uint32_t)TRACK_CW_TARGET_DEG;
+  progress_deg = (tracking_progress > (float)target_deg) ?
+                 target_deg : (uint32_t)tracking_progress;
+  (void)snprintf(line, sizeof(line), "DEG:%3lu/%3lu   ",
+                 (unsigned long)progress_deg,
+                 (unsigned long)target_deg);
+  OLED_ShowString(0, 4, line, 16);
+
+  yaw_x10 = (Yaw >= 0.0f) ?
+            (int32_t)(Yaw * 10.0f + 0.5f) :
+            (int32_t)(Yaw * 10.0f - 0.5f);
+  yaw_magnitude = (yaw_x10 < 0) ?
+                  (uint32_t)(-yaw_x10) : (uint32_t)yaw_x10;
+  (void)snprintf(line, sizeof(line), "YAW:%c%3lu.%1lu   ",
+                 (yaw_x10 < 0) ? '-' : '+',
+                 (unsigned long)(yaw_magnitude / 10U),
+                 (unsigned long)(yaw_magnitude % 10U));
+  OLED_ShowString(0, 6, line, 16);
+}
+
+/**
+  * @brief  低频串口报告，避免打印速度超过MPU FIFO消费速度
+  */
+static void UART_Report_Tracking_Mission(void)
+{
+  printf("TRACK:%s L:%u R:%u PID:%ld YAW:%.2f DEG:%.1f\r\n",
+         Tracking_State_Text(),
+         adc_dma_data[0],
+         adc_dma_data[1],
+         (long)Line_Following_PID_GetOutput(),
+         Yaw,
+         tracking_progress);
+}
 /* USER CODE END 0 */
 
 /**
@@ -649,555 +401,162 @@ static void OLED_Update_ADC(void)
   */
 int main(void)
 {
-
   /* USER CODE BEGIN 1 */
-  uint8_t * usart3_rxbuffer_pointer = NULL; /* USART3 接收缓冲区首地址 */
-  uint8_t key_value = 0U;                  /* USER 按键返回值 */
+  uint8_t key_value;
   /* USER CODE END 1 */
 
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_TIM2_Init();
-  if (digital_tracking_experiment_enable == 0U)
-  {
-    /* 非数字循迹模式才初始化原有 ADC、姿态、串口等外设。 */
-    MX_DMA_Init();
-    MX_TIM3_Init();
-    MX_USART3_UART_Init();
-    MX_TIM4_Init();
-    MX_TIM1_Init();
-    MX_I2C1_Init();
-    MX_ADC1_Init();
-  }
+  MX_USART3_UART_Init();
+  MX_I2C1_Init();
+  MX_ADC1_Init();
+
   /* USER CODE BEGIN 2 */
-	/* ===== 1. 执行机构和基础周期任务初始化 ===== */
-	TB6612_Init();
+  TB6612_Init();
+  Smart_Car_Stop();
+  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 
-	if (digital_tracking_experiment_enable == 0U)
-	{
-	HAL_TIM_Base_Start_IT(&htim3);
+  OLED_Init();
+  OLED_Clear();
+  OLED_ShowString(0, 0, "TRACK INIT      ", 16);
 
-	/* ===== 2. 串口接收和发送链路诊断 ===== */
-	usart3_rxbuffer_pointer = USART3_Get_RxBuffer_Pointer();
-	printf("READY\r\n");
+  /*
+   * 按指导书顺序启动ADC和DMA。
+   * DMA循环搬运两个Rank：左侧PB0/IN8在下标0，右侧PA7/IN7在下标1。
+   */
+  if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
+  {
+    adc_error_state = ADC_ERROR_CALIBRATION;
+  }
+  else if (HAL_ADC_Start(&hadc1) != HAL_OK)
+  {
+    adc_error_state = ADC_ERROR_START;
+  }
+  else if (HAL_ADC_Start_DMA(&hadc1,
+                             (uint32_t *)adc_dma_data,
+                             ADC_CHANNEL_COUNT) != HAL_OK)
+  {
+    adc_error_state = ADC_ERROR_DMA;
+  }
+  else
+  {
+    adc_ready = 1U;
+    printf("ADC DMA START OK: LEFT_IN8 RIGHT_IN7\r\n");
+  }
 
-	/* ===== 3. 轮速测量初始化 ===== */
-	Speed_MeasureInit();
+  /*
+   * 恢复MPU6050姿态链路：地址探测、DMP初始化、外部中断加10ms主动补读。
+   * OLED和串口不放在FIFO消费路径中，防止再次出现生产快于消费的问题。
+   */
+  mpu_detected_address = MPU6050_DetectAddress();
+  if (mpu_detected_address == 0U)
+  {
+    mpu_error_state = MPU_ERROR_NOT_FOUND;
+    printf("MPU6050 not found at 0x68 or 0x69\r\n");
+  }
+  else
+  {
+    mpu_init_result = MPU6050_DMP_Init();
+    if (mpu_init_result == 0U)
+    {
+      mpu_ready = 1U;
+      init_flag = 1U;
+      printf("MPU6050 DMP init success at 0x%02X\r\n",
+             mpu_detected_address);
+    }
+    else
+    {
+      mpu_error_state = MPU_ERROR_DMP_INIT;
+      printf("MPU6050 DMP init failed, addr:0x%02X code:%u\r\n",
+             mpu_detected_address,
+             mpu_init_result);
+    }
+  }
 
-	/*
-	 * ===== 4. 超声波避障初始化 =====
-	 * 当前 ULTRASONIC_AVOIDANCE_ENABLE=0，模块保持静默：
-	 * 不启动 TIM1 捕获、不发送 TRIG、不读取距离，也不干预 car_state。
-	 */
-#if ULTRASONIC_AVOIDANCE_ENABLE
-	HC_SR04Init(&htim1, TIM_CHANNEL_4);
-#else
-	measure_flag = 0U;
-	obstacle_present = 0U;
-#endif
-	
-/* ===== 5. OLED 初始化后先显示零角度，证明显示链路正常 ===== */
-OLED_Init();
-#if !ADC_EXPERIMENT_ENABLE
-OLED_Update_Pose();
-#endif
+  if ((adc_error_state != ADC_ERROR_NONE) ||
+      (mpu_error_state != MPU_ERROR_NONE))
+  {
+    tracking_state = TRACK_ERROR;
+  }
 
-/*
- * 按指导书第 12~13 页的顺序启动 ADC：先 HAL_ADC_Start，随后启动 DMA。
- * DMA 循环搬运五个 Rank：电池 IN3，以及 TCRT5000 的 IN6/IN7/IN8/IN9。
- */
-if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
-{
-	adc_error_state = ADC_ERROR_CALIBRATION;
-	printf("ADC CALIBRATION FAILED\r\n");
-}
-else if (HAL_ADC_Start(&hadc1) != HAL_OK)
-{
-	adc_error_state = ADC_ERROR_START;
-	printf("ADC START FAILED\r\n");
-}
-else if (HAL_ADC_Start_DMA(&hadc1, (uint32_t *)adc_dma_data,
-                           ADC_CHANNEL_COUNT) != HAL_OK)
-{
-	adc_error_state = ADC_ERROR_DMA;
-	printf("ADC DMA START FAILED\r\n");
-}
-else
-{
-	printf("ADC DMA START OK: BAT+S1+S2+S3+S4\r\n");
-}
-OLED_Update_ADC();
-
-/* ===== 6. 颜色传感器初始化；颜色仍参与红停、绿行控制 ===== */
-#if COLOR_SENSOR_ENABLE
-if (TCS34725_Init()) 
-{
-	printf("TCS34725 init success\n");
-} 
-else 
-{
-	printf("TCS34725 init failed\n");
-}
-#endif
-
-/* ===== 7. MPU6050 地址探测与 DMP 初始化 =====
- * 先探测 AD0=0 对应的 0x68，再探测 AD0=1 对应的 0x69。
- * 探测成功后，底层所有 MPU 读写都会自动使用找到的地址。
- */
-mpu_detected_address = MPU6050_DetectAddress();
-if (mpu_detected_address == 0U)
-{
-	init_flag = 0U;
-	mpu_init_result = 10U;
-	printf("MPU6050 not found at 0x68 or 0x69\r\n");
-
-	#if !ADC_EXPERIMENT_ENABLE
-	OLED_Clear();
-	OLED_ShowString(0, 0, "MPU NOT FOUND", 16);
-	OLED_ShowString(0, 2, "SCAN: 68 69", 16);
-	OLED_ShowString(0, 4, "PB6: SCL", 16);
-	OLED_ShowString(0, 6, "PB7: SDA", 16);
-	#endif
-}
-else
-{
-	mpu_init_result = MPU6050_DMP_Init();
-	if (mpu_init_result == 0U)
-	{
-		init_flag = 1U;
-		printf("MPU6050 DMP init success at 0x%02X\r\n",
-		       mpu_detected_address);
-		#if !ADC_EXPERIMENT_ENABLE
-		OLED_Update_Pose();
-		#endif
-	}
-	else
-	{
-		init_flag = 0U;
-		printf("MPU6050 DMP init failed, addr:0x%02X code:%u\r\n",
-		       mpu_detected_address,
-		       mpu_init_result);
-
-		#if !ADC_EXPERIMENT_ENABLE
-		OLED_Clear();
-		OLED_ShowString(0, 0, "MPU6050 ERROR", 16);
-		OLED_ShowString(0, 2, "CODE:", 16);
-		OLED_ShowNum(48, 2, mpu_init_result, 2);
-		OLED_ShowString(0, 4,
-		                (mpu_detected_address == 0x69U) ?
-		                "FOUND: 0x69" : "FOUND: 0x68",
-		                16);
-		OLED_ShowString(0, 6, "DMP INIT FAIL", 16);
-		#endif
-	}
-}
-
-/* 各周期任务从同一时间基准开始，避免初始化结束后集中触发。 */
-last_mpu_poll_ms = HAL_GetTick();
-last_pose_display_ms = last_mpu_poll_ms;
-last_pose_uart_ms = last_mpu_poll_ms;
-last_color_sample_ms = last_mpu_poll_ms;
-last_color_uart_ms = last_mpu_poll_ms;
-last_adc_display_ms = last_mpu_poll_ms;
-	}
-	else
-	{
-		/*
-		 * 指导书 11.2 基础实验只使用按键、四路 DO、TIM2 PWM 和 SysTick。
-		 * 上电先保持停车，等待 USER 按键启动循迹。
-		 */
-		start_flag = 0U;
-		measure_flag = 0U;
-		HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-		Smart_Car_Stop();
-	}
-
-
-	
-	
+  last_mpu_poll_ms = HAL_GetTick();
+  last_display_ms = last_mpu_poll_ms;
+  last_uart_ms = last_mpu_poll_ms;
+  OLED_Update_Tracking_Mission();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-		if (digital_tracking_experiment_enable == 1U)
-		{
-			key_value = Key_Proc();
+    uint8_t control_tick_due = 0U;
+    uint32_t now_ms = HAL_GetTick();
 
-			/* 按照指导书：每按一次 USER 键，在启动和停止之间切换。 */
-			if (key_value == 1U)
-			{
-				if (start_flag == 0U)
-				{
-					/* 小车启动：点亮板载状态灯，并先直行。 */
-					start_flag = 1U;
-					HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-					Smart_Car_Go_Straight();
-				}
-				else
-				{
-					/* 小车停止：熄灭板载状态灯并清除待处理的循迹标志。 */
-					start_flag = 0U;
-					measure_flag = 0U;
-					HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-					Smart_Car_Stop();
-				}
-			}
+    /*
+     * 最高优先级：及时消费MPU FIFO。
+     * 驱动内部会有界追读并采用较新姿态；此处不打印、不刷新OLED。
+     */
+    if ((mpu_ready == 1U) &&
+        ((mems_data_rdy_flag == 1U) ||
+         ((now_ms - last_mpu_poll_ms) >= MPU_POLL_INTERVAL_MS)))
+    {
+      mems_data_rdy_flag = 0U;
+      last_mpu_poll_ms = now_ms;
+      if (MPU6050_DMP_GetData(&Pitch, &Roll, &Yaw) == 0U)
+      {
+        mpu_sample_valid = 1U;
+        Tracking_Mission_Update_Yaw(Yaw);
+      }
+    }
 
-			if ((start_flag == 1U) && (measure_flag == 1U))
-			{
-				/* SysTick 每 50 ms 置位一次，主循环负责执行具体循迹判断。 */
-				measure_flag = 0U;
-				Smart_Car_Automatic_Tracing();
-			}
+    /* USER按键：等待/完成时启动，运行时立即停车，错误时不掩盖故障。 */
+    key_value = Key_Proc();
+    if (key_value == 1U)
+    {
+      if (Tracking_Mission_Is_Running() == 1U)
+      {
+        Tracking_Mission_Reset();
+        printf("TRACK MISSION STOPPED BY USER\r\n");
+      }
+      else if ((tracking_state == TRACK_WAIT_START) ||
+               (tracking_state == TRACK_COMPLETE))
+      {
+        Tracking_Mission_Start();
+      }
+    }
 
-			/* 数字循迹模式不执行原有 ADC、颜色、姿态和超声波任务。 */
-			continue;
-		}
+    /* 原子取走一次50ms请求；阻塞后不补跑多个PID周期。 */
+    __disable_irq();
+    if (control_tick_50ms == 1U)
+    {
+      control_tick_50ms = 0U;
+      control_tick_due = 1U;
+    }
+    __enable_irq();
 
-		/*
-		 * ===== A. MPU6050 数据链 =====
-		 * PA8 外部中断只置位 mems_data_rdy_flag；主循环负责 IIC 读取。
-		 * 另外每 10ms 主动补读一次，防止中断边沿丢失或 INT 持续有效。
-		 * 姿态控制每帧更新，OLED 和串口按较低频率刷新，避免堵塞 FIFO。
-		 */
-		if ((init_flag == 1U) &&
-		    ((mems_data_rdy_flag == 1U) ||
-		     ((HAL_GetTick() - last_mpu_poll_ms) >= MPU_POLL_INTERVAL_MS)))
-		{
-			mems_data_rdy_flag = 0U;
-			last_mpu_poll_ms = HAL_GetTick();
+    Tracking_Mission_Process(control_tick_due);
 
-			if (MPU6050_DMP_GetData(&Pitch, &Roll, &Yaw) == 0U)
-			{
-				Pose_Task_Update_Yaw(Yaw);
+    now_ms = HAL_GetTick();
+    if ((now_ms - last_display_ms) >= TRACK_DISPLAY_INTERVAL_MS)
+    {
+      last_display_ms = now_ms;
+      OLED_Update_Tracking_Mission();
+    }
 
-				if ((HAL_GetTick() - last_pose_display_ms) >=
-				    POSE_DISPLAY_INTERVAL_MS)
-				{
-					last_pose_display_ms = HAL_GetTick();
-					#if !ADC_EXPERIMENT_ENABLE
-					OLED_Update_Pose();
-					#endif
-				}
-
-				if ((HAL_GetTick() - last_pose_uart_ms) >=
-				    POSE_UART_REPORT_INTERVAL_MS)
-				{
-					last_pose_uart_ms = HAL_GetTick();
-					printf("Pitch:%.2f Roll:%.2f Yaw:%.2f\r\n",
-					       Pitch, Roll, Yaw);
-				}
-			}
-		}
-
-		/* ===== B. 实验 10.4：DMA 持续采样，OLED 每 100ms 刷新一次 ===== */
-		if ((HAL_GetTick() - last_adc_display_ms) >= ADC_DISPLAY_INTERVAL_MS)
-		{
-			last_adc_display_ms = HAL_GetTick();
-			OLED_Update_ADC();
-		}
-
-		/* ===== C. 串口命令：GO/STOP/LEFT/RIGHT/STATUS?/SPEED=xx ===== */
-		if (USART3_Get_RxState() == 1U)
-		{
-			uint8_t speed_percent;
-			uint8_t command_valid = 1U;
-
-			if (strcmp((const char *)usart3_rxbuffer_pointer, "GO") == 0)
-			{
-				Pose_Task_Stop();
-				color_control_armed = 1U;
-				auto_enabled = 1U;
-				turn_count = 0U;
-				car_state = CAR_FORWARD;
-			}
-			else if (strcmp((const char *)usart3_rxbuffer_pointer, "STOP") == 0)
-			{
-				Pose_Task_Stop();
-				color_control_armed = 0U;
-				auto_enabled = 0U;
-				turn_count = 0U;
-				car_state = CAR_STOP;
-			}
-			else if (strcmp((const char *)usart3_rxbuffer_pointer, "LEFT") == 0)
-			{
-				Pose_Task_Stop();
-				color_control_armed = 0U;
-				auto_enabled = 0U;
-				turn_count = 0U;
-				car_state = CAR_LEFT;
-			}
-			else if (strcmp((const char *)usart3_rxbuffer_pointer, "RIGHT") == 0)
-			{
-				Pose_Task_Stop();
-				color_control_armed = 0U;
-				auto_enabled = 0U;
-				turn_count = 0U;
-				car_state = CAR_RIGHT;
-			}
-			else if (strcmp((const char *)usart3_rxbuffer_pointer, "STATUS?") == 0)
-			{
-			
-			}
-			else if (Parse_Speed_Command((const char *)usart3_rxbuffer_pointer,
-			                             &speed_percent) == 1U)
-			{
-				car_speed_percent = speed_percent;
-				car_speed_pwm = (uint16_t)(((uint32_t)PWM_PERIOD * car_speed_percent) / 100U);
-			}
-			else
-			{
-				uint16_t diagnostic_index;
-
-				command_valid = 0U;
-				printf("ERROR:COMMAND LEN:%u HEX:", usart3_rx_count);
-				for (diagnostic_index = 0U;
-				     diagnostic_index < usart3_rx_count;
-				     diagnostic_index++)
-				{
-					printf("%02X", usart3_rx_buffer[diagnostic_index]);
-				}
-				printf("\r\n");
-			}
-
-			if (command_valid == 1U)
-			{
-				time_count = 0U;
-				light_state = 1U;
-				Car_Control();
-				(void)HAL_UART_Transmit(&huart3,
-				                       uart_direct_ack_message,
-				                       sizeof(uart_direct_ack_message) - 1U,
-				                       100U);
-				UART_Send_Status();
-			}
-
-			USART3_Start_Receive();
-		}
-
-		/* ===== D. 50 ms 调度节拍：只负责清除节拍标志，并按开关调度超声波 ===== */
-		if (control_tick_50ms == 1U)
-		{
-			__disable_irq();
-			control_tick_50ms = 0U;
-			__enable_irq();
-
-#if ULTRASONIC_AVOIDANCE_ENABLE
-			if ((auto_enabled == 1U) || (Pose_Task_Is_Active() == 1U))
-			{
-				measure_flag = 1U;
-				if ((auto_enabled == 1U) &&
-				    (car_state == CAR_AVOID_RIGHT) &&
-				    (turn_count < AVOID_TURN_TICKS))
-				{
-					turn_count++;
-				}
-			}
-#endif
-		}
-
-		/* ===== E. 超声波避障：当前由总开关关闭，不测距、不打印、不干预姿态旋转 ===== */
-#if ULTRASONIC_AVOIDANCE_ENABLE
-		if (measure_flag == 1U)
-		{
-			measure_flag = 0U;
-			if (((auto_enabled == 1U) &&
-			     ((car_state == CAR_FORWARD) || (car_state == CAR_STOP))) ||
-			    (Pose_Task_Is_Active() == 1U))
-			{
-				HC_SR04Start();
-				front_distance = HC_SR04Read();
-				printf("DISTANCE:%.1f cm\r\n", front_distance);
-
-				if (front_distance > 0.0f)
-				{
-					if (front_distance < OBSTACLE_DISTANCE_CM)
-					{
-						obstacle_present = 1U;
-					}
-					else if (front_distance >= OBSTACLE_RESUME_DISTANCE_CM)
-					{
-						obstacle_present = 0U;
-					}
-				}
-
-				if ((pose_task_state == POSE_ROTATING) &&
-				    (obstacle_present == 1U))
-				{
-					pose_task_state = POSE_PAUSED_BY_OBSTACLE;
-					car_state = CAR_STOP;
-				}
-				else if ((auto_enabled == 1U) &&
-				         (car_state == CAR_FORWARD) &&
-				         (obstacle_present == 1U))
-				{
-					car_state = CAR_AVOID_RIGHT;
-					turn_count = 0U;
-					time_count = 0U;
-					light_state = 1U;
-					UART_Send_Status();
-				}
-			}
-		}
-
-		if ((auto_enabled == 1U) && (Pose_Task_Is_Active() == 0U))
-		{
-			if ((car_state == CAR_AVOID_RIGHT) &&
-			    (turn_count >= AVOID_TURN_TICKS))
-			{
-				car_state = CAR_FORWARD;
-				turn_count = 0U;
-				time_count = 0U;
-				light_state = 1U;
-				UART_Send_Status();
-			}
-		}
-		else if (Pose_Task_Is_Active() == 0U)
-		{
-			measure_flag = 0U;
-			turn_count = 0U;
-		}
-#else
-		/* 超声波避障当前关闭：持续清除残留状态，防止旧障碍标志让小车误停。 */
-		measure_flag = 0U;
-		obstacle_present = 0U;
-		turn_count = 0U;
-#endif
-
-		/* ===== F. 姿态任务状态机：读取新 Yaw，完成每次 90 度旋转及 1 秒间隔 ===== */
-		Pose_Task_Process();
-
-		/* ===== G. 颜色识别：红色立即停车；绿色仅在姿态任务空闲时启动前进 ===== */
-		/* 其他颜色保持上一次有效状态，不覆盖按键、串口或姿态任务的决定。 */
-#if COLOR_SENSOR_ENABLE
-		if ((HAL_GetTick() - last_color_sample_ms) >= COLOR_SAMPLE_INTERVAL_MS)
-		{
-			uint8_t color_report_due;
-
-			last_color_sample_ms = HAL_GetTick();
-			color_report_due = ((HAL_GetTick() - last_color_uart_ms) >=
-			                    COLOR_UART_REPORT_INTERVAL_MS) ? 1U : 0U;
-
-			if (TCS34725_GetRawData(&rgb))
-			{
-				RGB_normalize(&rgb);
-				if (color_report_due == 1U)
-				{
-					last_color_uart_ms = HAL_GetTick();
-					printf("R=%d G=%d B=%d C=%d\r\n", rgb.r, rgb.g, rgb.b, rgb.c);
-				}
-
-				if ((rgb.c >= COLOR_CLEAR_MIN) &&
-				    (rgb.r > rgb.g + COLOR_MARGIN) &&
-				    (rgb.r > rgb.b + COLOR_MARGIN))
-				{
-					if (color_report_due == 1U)
-					{
-						printf("Red\r\n");
-					}
-					Pose_Task_Stop();
-					auto_enabled = 0U;
-					measure_flag = 0U;
-					turn_count = 0U;
-					car_state = CAR_STOP;
-				}
-				else if ((rgb.c >= COLOR_CLEAR_MIN) &&
-				         (rgb.g > rgb.r + COLOR_MARGIN) &&
-				         (rgb.g > rgb.b + COLOR_MARGIN))
-				{
-					if (color_report_due == 1U)
-					{
-						printf("Green\r\n");
-					}
-
-					/* 绿色只有在人工授权后才能启动前进，复位本身不构成授权。 */
-					if ((color_control_armed == 1U) &&
-					    (pose_task_state == POSE_IDLE))
-					{
-						auto_enabled = 1U;
-						car_speed_percent = COLOR_FORWARD_SPEED_PERCENT;
-						car_speed_pwm = (uint16_t)(((uint32_t)PWM_PERIOD *
-						                            car_speed_percent) / 100U);
-						if (car_state != CAR_AVOID_RIGHT)
-						{
-							turn_count = 0U;
-							car_state = (obstacle_present == 1U) ?
-							            CAR_STOP : CAR_FORWARD;
-						}
-					}
-				}
-				else if (color_report_due == 1U)
-				{
-					printf("Other color, keep state\r\n");
-				}
-			}
-		}
-#endif
-
-		/* ===== H. 统一输出：更新运行标志、状态灯和电机，避免各模块直接争抢电机 ===== */
-		start_flag = ((car_state != CAR_STOP) ||
-		              (Pose_Task_Is_Active() == 1U)) ? 1U : 0U;
-		Light_Blink_Proc();
-		Car_Control();
-
-		/* ===== I. 轮速采样：只用于观察和串口诊断，不参与本轮姿态闭环 ===== */
-		if ((Speed_Measure_GetLeftDataState() == 1U) ||
-		    (Speed_Measure_GetRightDataState() == 1U))
-		{
-			float left_motor_speed = Speed_Measure_GetLeftData();
-			float right_motor_speed = Speed_Measure_GetRightData();
-
-			/* 原地转向时内侧轮理论速度按 0 显示，避免把静止轮的残余计数误认为运动。 */
-			if (car_state == CAR_LEFT)
-			{
-				left_motor_speed = 0.0f;
-			}
-			else if ((car_state == CAR_RIGHT) ||
-			         (car_state == CAR_AVOID_RIGHT))
-			{
-				right_motor_speed = 0.0f;
-			}
-			else if (car_state == CAR_STOP)
-			{
-				left_motor_speed = 0.0f;
-				right_motor_speed = 0.0f;
-			}
-
-			printf("LEFT_SPEED:%.2f r/s RIGHT_SPEED:%.2f r/s\r\n",
-			       left_motor_speed, right_motor_speed);
-
-			if (Speed_Measure_GetLeftDataState() == 1U)
-			{
-				Speed_Measure_LeftDataProcessComplt();
-			}
-			if (Speed_Measure_GetRightDataState() == 1U)
-			{
-				Speed_Measure_RightDataProcessComplt();
-			}
-		}
-  }
+    if ((now_ms - last_uart_ms) >= TRACK_UART_INTERVAL_MS)
+    {
+      last_uart_ms = now_ms;
+      UART_Report_Tracking_Mission();
+    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-  
+  }
   /* USER CODE END 3 */
 }
 
@@ -1211,9 +570,6 @@ void SystemClock_Config(void)
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
   RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
 
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
   RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
@@ -1226,19 +582,17 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
   RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
+
   PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
   PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
@@ -1248,72 +602,21 @@ void SystemClock_Config(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-    if(huart->Instance == USART3)
-    {   
-        if (usart3_rx_temp == 0U)
-        {
-            /* Ignore stray NUL bytes from serial-terminal send buffers. */
-            HAL_UART_Receive_IT(&huart3, &usart3_rx_temp, 1U);
-        }
-        else if ((usart3_rx_temp == '\r') || (usart3_rx_temp == '\n'))
-        {
-            if (usart3_rx_count > 0)
-            {
-                usart3_rx_buffer[usart3_rx_count] = '\0';
-                usart3_rx_cmplt_flag = 1U;
-            }
-            else
-            {
-                HAL_UART_Receive_IT(&huart3, &usart3_rx_temp, 1U);
-            }
-        }
-        else if (usart3_rx_count < (USART3_RX_BUFFER_NUM - 1U))
-        {
-            usart3_rx_buffer[usart3_rx_count] = usart3_rx_temp;
-            usart3_rx_count++;
-            usart3_rx_buffer[usart3_rx_count] = '\0';
-
-            /* Accept the short control commands even when CR/LF is omitted. */
-            if ((strcmp((const char *)usart3_rx_buffer, "GO") == 0) ||
-                (strcmp((const char *)usart3_rx_buffer, "STOP") == 0) ||
-                (strcmp((const char *)usart3_rx_buffer, "LEFT") == 0) ||
-                (strcmp((const char *)usart3_rx_buffer, "RIGHT") == 0) ||
-                (strcmp((const char *)usart3_rx_buffer, "STATUS?") == 0))
-            {
-                usart3_rx_cmplt_flag = 1U;
-            }
-            else
-            {
-                HAL_UART_Receive_IT(&huart3, &usart3_rx_temp, 1U);
-            }
-
-        }
-        else
-        {
-            usart3_rx_buffer[usart3_rx_count] = '\0';
-            usart3_rx_cmplt_flag = 1U;
-        }
-				
-    }
-}
-
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-    if ((GPIO_Pin == MEMS_INT_Pin) && (init_flag == 1U))
-    {
-        mems_data_rdy_flag = 1U;
-    }
+  if ((GPIO_Pin == MEMS_INT_Pin) && (init_flag == 1U))
+  {
+    mems_data_rdy_flag = 1U;
+  }
 }
 
-/* DMA/ADC 运行期出错时只置状态，主循环负责刷新 OLED，避免在中断中操作 I2C。 */
+/* DMA/ADC错误回调只置状态；主循环负责停车和显示，避免中断内I2C阻塞。 */
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
 {
-    if (hadc->Instance == ADC1)
-    {
-        adc_error_state = ADC_ERROR_RUNTIME;
-    }
+  if (hadc->Instance == ADC1)
+  {
+    adc_error_state = ADC_ERROR_RUNTIME;
+  }
 }
 /* USER CODE END 4 */
 
@@ -1324,7 +627,6 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
 void Error_Handler(void)
 {
   /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
@@ -1332,19 +634,15 @@ void Error_Handler(void)
   /* USER CODE END Error_Handler_Debug */
 }
 
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
+  * @brief  Reports the name of the source file and the source line number.
   */
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  (void)file;
+  (void)line;
   /* USER CODE END 6 */
 }
-#endif /* USE_FULL_ASSERT */
+#endif
