@@ -9,6 +9,7 @@ New-Item -ItemType Directory -Force -Path $buildRoot | Out-Null
 
 $sourceMap = @{
     'test_smoke.c' = @()
+    'test_error_manager.c' = @('Core\Src\services\error_manager.c')
 }
 
 $tests = Get-ChildItem -LiteralPath $nativeRoot -Filter 'test_*.c' | Sort-Object Name
