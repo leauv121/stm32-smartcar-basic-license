@@ -1,17 +1,22 @@
 ﻿#include "car_control.h"
 #include "tb6612.h"
 
-/* 四路循迹模块从右向左依次保存为 LINE1、LINE2、LINE3、LINE4。 */
-GPIO_PinState front_line[4] = {GPIO_PIN_RESET};
-
-/*
- * 基础循迹实车调参：
- * 直行和转弯外侧轮使用 4500；弱转弯内侧轮保留 2800，不再直接停轮，
- * 用连续的双轮差速代替“走一下、停一下”，减小中间位置反复修正时的顿挫。
- */
+/* 数字循迹转向函数保留给自动掉头；PID 循迹使用下面单独的参数。 */
 #define TRACKING_OUTER_SPEED 4500U
 #define TRACKING_INNER_SPEED 2800U
 #define TRACKING_STOP_SPEED     0U
+
+/* 指导书第 11.3 节给出的第一组 PID 参数，先保持原值进行实车验证。 */
+#define PID_KP          1.5f
+#define PID_KI          0.05f
+#define PID_KD          2.0f
+#define PID_BASE_SPEED  3500
+#define PID_MAX_SPEED   7200
+#define PID_I_LIMIT     8000
+
+static int32_t pid_last_error = 0;
+static int32_t pid_integral = 0;
+static int32_t pid_output = 0;
 
 /**
   * @brief  小车强左转
@@ -93,63 +98,79 @@ void Smart_Car_Stop(void)
 }
 
 /**
-  * @brief  按指导书第 11.2 节读取四路 DO 电平并执行基础循迹
+  * @brief  使用两路 AO 采样值执行指导书第 11.3 节 PID 循迹
+  * @param  left_adc  左内侧传感器 ADC 值（PB0/ADC1_IN8）
+  * @param  right_adc 右内侧传感器 ADC 值（PA7/ADC1_IN7）
+  * @retval None
+  */
+void Line_Following_PID(uint16_t left_adc, uint16_t right_adc)
+{
+  int32_t error;
+  int32_t left_speed;
+  int32_t right_speed;
+
+  /* 指导书规定偏差为“右侧采样值减左侧采样值”。 */
+  error = (int32_t)right_adc - (int32_t)left_adc;
+
+  /* 积分限幅用于避免长时间偏向一侧时积分无限累积。 */
+  pid_integral += error;
+  if (pid_integral > PID_I_LIMIT)
+  {
+    pid_integral = PID_I_LIMIT;
+  }
+  else if (pid_integral < -PID_I_LIMIT)
+  {
+    pid_integral = -PID_I_LIMIT;
+  }
+
+  pid_output = (int32_t)(PID_KP * (float)error +
+                         PID_KI * (float)pid_integral +
+                         PID_KD * (float)(error - pid_last_error));
+  pid_last_error = error;
+
+  left_speed = PID_BASE_SPEED + pid_output;
+  right_speed = PID_BASE_SPEED - pid_output;
+
+  if (left_speed > PID_MAX_SPEED)
+  {
+    left_speed = PID_MAX_SPEED;
+  }
+  else if (left_speed < 0)
+  {
+    left_speed = 0;
+  }
+
+  if (right_speed > PID_MAX_SPEED)
+  {
+    right_speed = PID_MAX_SPEED;
+  }
+  else if (right_speed < 0)
+  {
+    right_speed = 0;
+  }
+
+  TB6612_SetSpeed(MOTOR_LEFT, 0U, (uint16_t)left_speed);
+  TB6612_SetSpeed(MOTOR_RIGHT, 0U, (uint16_t)right_speed);
+}
+
+/**
+  * @brief  清除 PID 历史，防止停止、掉头或方向切换后沿用旧误差
   * @param  None
   * @retval None
-  * @note   LINE1 到 LINE4 按照车头朝前时从右到左排列。
-  *         指导书规定 GPIO_PIN_SET 表示对应模块检测到黑线。
   */
-void Smart_Car_Automatic_Tracing(void)
+void Line_Following_PID_Reset(void)
 {
-  /* 先一次性读取四路输入，保证本轮判断使用同一时刻附近的数据。 */
-  front_line[0] = HAL_GPIO_ReadPin(LINE1_GPIO_Port, LINE1_Pin);
-  front_line[1] = HAL_GPIO_ReadPin(LINE2_GPIO_Port, LINE2_Pin);
-  front_line[2] = HAL_GPIO_ReadPin(LINE3_GPIO_Port, LINE3_Pin);
-  front_line[3] = HAL_GPIO_ReadPin(LINE4_GPIO_Port, LINE4_Pin);
+  pid_last_error = 0;
+  pid_integral = 0;
+  pid_output = 0;
+}
 
-  /*
-   * 实车验证补充的居中状态：
-   * 最右 LINE1 和最左 LINE4 位于白面，中间 LINE2、LINE3 同时压住黑线时，
-   * 说明黑线处于车体中央，应优先直行，避免弱左/弱右交替让车速变慢。
-   */
-  if ((front_line[0] == GPIO_PIN_RESET) &&
-      (front_line[1] == GPIO_PIN_SET) &&
-      (front_line[2] == GPIO_PIN_SET) &&
-      (front_line[3] == GPIO_PIN_RESET))
-  {
-    Smart_Car_Go_Straight();
-  }
-  else if ((front_line[0] == GPIO_PIN_SET) &&
-      ((front_line[2] == GPIO_PIN_RESET) ||
-       (front_line[3] == GPIO_PIN_RESET)))
-  {
-    /* 从右数第一个模块检测到黑线：小车强右转。 */
-    Smart_Car_Turn_Right();
-  }
-  else if ((front_line[1] == GPIO_PIN_SET) &&
-           ((front_line[2] == GPIO_PIN_RESET) ||
-            (front_line[3] == GPIO_PIN_RESET)))
-  {
-    /* 从右数第二个模块检测到黑线：小车弱右转。 */
-    Smart_Car_Turn_Right_Weak();
-  }
-  else if ((front_line[3] == GPIO_PIN_SET) &&
-           ((front_line[0] == GPIO_PIN_RESET) ||
-            (front_line[1] == GPIO_PIN_RESET)))
-  {
-    /* 从右数第四个模块检测到黑线：小车强左转。 */
-    Smart_Car_Turn_Left();
-  }
-  else if ((front_line[2] == GPIO_PIN_SET) &&
-           ((front_line[0] == GPIO_PIN_RESET) ||
-            (front_line[1] == GPIO_PIN_RESET)))
-  {
-    /* 从右数第三个模块检测到黑线：小车弱左转。 */
-    Smart_Car_Turn_Left_Weak();
-  }
-  else
-  {
-    /* 没有出现需要纠偏的组合时，按照指导书保持直行。 */
-    Smart_Car_Go_Straight();
-  }
+/**
+  * @brief  获取最近一次 PID 输出，仅用于低频串口诊断
+  * @param  None
+  * @retval 最近一次左右轮差速控制量
+  */
+int32_t Line_Following_PID_GetOutput(void)
+{
+  return pid_output;
 }
