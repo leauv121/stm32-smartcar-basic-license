@@ -148,13 +148,20 @@ static void Tracking_Mission_Reset(void)
   */
 static void Tracking_Mission_Start(void)
 {
-  if ((adc_ready == 0U) ||
-      (mpu_ready == 0U) ||
-      (mpu_sample_valid == 0U) ||
-      (adc_error_state != ADC_ERROR_NONE) ||
+  if ((adc_error_state != ADC_ERROR_NONE) ||
       (mpu_error_state != MPU_ERROR_NONE))
   {
     tracking_state = TRACK_ERROR;
+    Smart_Car_Stop();
+    return;
+  }
+
+  /* 外设尚在等待第一帧数据时保持等待，不把“未就绪”误报为硬件故障。 */
+  if ((adc_ready == 0U) ||
+      (mpu_ready == 0U) ||
+      (mpu_sample_valid == 0U))
+  {
+    tracking_state = TRACK_WAIT_START;
     Smart_Car_Stop();
     return;
   }
@@ -222,7 +229,6 @@ static void Tracking_Mission_Update_Yaw(float current_yaw)
     tracking_state = TRACK_TURN_AROUND;
     tracking_progress = 0.0f;
     tracking_last_yaw = current_yaw;
-    printf("CW COMPLETE, TURN RIGHT 180 DEG\r\n");
   }
   else if ((tracking_state == TRACK_TURN_AROUND) &&
            (tracking_progress >= TRACK_TURN_TARGET_DEG))
@@ -232,7 +238,6 @@ static void Tracking_Mission_Update_Yaw(float current_yaw)
     tracking_state = TRACK_CCW;
     tracking_progress = 0.0f;
     tracking_last_yaw = current_yaw;
-    printf("TURN COMPLETE, CCW 2 LAPS\r\n");
   }
   else if ((tracking_state == TRACK_CCW) &&
            (tracking_progress >= TRACK_CCW_TARGET_DEG))
@@ -242,7 +247,6 @@ static void Tracking_Mission_Update_Yaw(float current_yaw)
     tracking_state = TRACK_COMPLETE;
     tracking_progress = TRACK_CCW_TARGET_DEG;
     HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-    printf("TRACK MISSION COMPLETE\r\n");
   }
 }
 
