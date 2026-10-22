@@ -1,5 +1,14 @@
 ﻿#include "car_control.h"
-#include "tb6612.h"
+#include "control/motion_control.h"
+
+static void CarControl_Apply(int16_t left, int16_t right)
+{
+  MotionRequest request;
+  request.mode = ((left == 0) && (right == 0)) ? MOTION_STOP : MOTION_DRIVE;
+  request.left_target = left;
+  request.right_target = right;
+  MotionControl_Apply(request);
+}
 
 /* 数字循迹转向函数保留给自动掉头；PID 循迹使用下面单独的参数。 */
 #define TRACKING_OUTER_SPEED 4500U
@@ -65,8 +74,7 @@ static void Line_Following_PID_Resume(uint16_t left_adc, uint16_t right_adc)
   */
 void Smart_Car_Turn_Left(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_STOP_SPEED);
-  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_OUTER_SPEED);
+  CarControl_Apply(TRACKING_STOP_SPEED, TRACKING_OUTER_SPEED);
 }
 
 /**
@@ -77,8 +85,7 @@ void Smart_Car_Turn_Left(void)
 void Smart_Car_Turn_Left_Weak(void)
 {
   /* 弱左转时两轮继续前进，只让左轮慢于右轮。 */
-  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_INNER_SPEED);
-  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_OUTER_SPEED);
+  CarControl_Apply(TRACKING_INNER_SPEED, TRACKING_OUTER_SPEED);
 }
 
 /**
@@ -88,8 +95,7 @@ void Smart_Car_Turn_Left_Weak(void)
   */
 void Smart_Car_Turn_Right(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_OUTER_SPEED);
-  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_STOP_SPEED);
+  CarControl_Apply(TRACKING_OUTER_SPEED, TRACKING_STOP_SPEED);
 }
 
 /**
@@ -100,8 +106,7 @@ void Smart_Car_Turn_Right(void)
 void Smart_Car_Turn_Right_Weak(void)
 {
   /* 弱右转时两轮继续前进，只让右轮慢于左轮。 */
-  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_OUTER_SPEED);
-  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_INNER_SPEED);
+  CarControl_Apply(TRACKING_OUTER_SPEED, TRACKING_INNER_SPEED);
 }
 
 /**
@@ -111,8 +116,7 @@ void Smart_Car_Turn_Right_Weak(void)
   */
 void Smart_Car_Go_Straight(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT, 0, TRACKING_OUTER_SPEED);
-  TB6612_SetSpeed(MOTOR_RIGHT, 0, TRACKING_OUTER_SPEED);
+  CarControl_Apply(TRACKING_OUTER_SPEED, TRACKING_OUTER_SPEED);
 }
 
 /**
@@ -122,8 +126,7 @@ void Smart_Car_Go_Straight(void)
   */
 void Smart_Car_Go_Straight_Fast(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT,0,6000);
-  TB6612_SetSpeed(MOTOR_RIGHT,0,6000);
+  CarControl_Apply(6000, 6000);
 }
 
 /**
@@ -133,8 +136,7 @@ void Smart_Car_Go_Straight_Fast(void)
   */
 void Smart_Car_Stop(void)
 {
-  TB6612_SetSpeed(MOTOR_LEFT,0,0);
-  TB6612_SetSpeed(MOTOR_RIGHT,0,0);
+  CarControl_Apply(0, 0);
 }
 
 /**
@@ -206,8 +208,7 @@ void Line_Following_PID(uint16_t left_adc, uint16_t right_adc)
     right_speed = 0;
   }
 
-  TB6612_SetSpeed(MOTOR_LEFT, 0U, (uint16_t)left_speed);
-  TB6612_SetSpeed(MOTOR_RIGHT, 0U, (uint16_t)right_speed);
+  CarControl_Apply((int16_t)left_speed, (int16_t)right_speed);
 }
 
 /**

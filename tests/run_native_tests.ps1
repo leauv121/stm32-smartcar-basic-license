@@ -21,6 +21,8 @@ $sourceMap = @{
         'Core\Src\services\error_manager.c',
         'Core\Src\services\sensor_service.c'
     )
+    'test_line_follow_control.c' = @('Core\Src\control\line_follow_control.c')
+    'test_turn_control.c' = @('Core\Src\control\turn_control.c')
 }
 
 $tests = Get-ChildItem -LiteralPath $nativeRoot -Filter 'test_*.c' | Sort-Object Name
