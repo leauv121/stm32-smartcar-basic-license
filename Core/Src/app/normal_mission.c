@@ -1,0 +1,46 @@
+#include "app/normal_mission.h"
+#include "config/car_parameters.h"
+
+static NormalMissionState state;
+
+static MissionOutput output_for_state(void)
+{
+    MissionOutput output = {MotionRequest_Stop(), INDICATOR_OFF, 0U, 0U};
+    if ((state == NORMAL_TRACK_OUT) || (state == NORMAL_RETURN))
+    {
+        output.motion.mode = MOTION_DRIVE;
+        output.motion.left_target = CAR_LINE_PID_BASE_SPEED;
+        output.motion.right_target = CAR_LINE_PID_BASE_SPEED;
+    }
+    else if (state == NORMAL_START_FLASH) output.indicator = INDICATOR_STARTUP_FLASH_3;
+    else if ((state == NORMAL_RED_WAIT) || (state == NORMAL_OBSTACLE_HOLD)) output.indicator = INDICATOR_HAZARD;
+    else if (state == NORMAL_AVOID_TURN)
+    {
+        output.motion.mode = MOTION_DRIVE;
+        output.motion.left_target = 4500;
+        output.motion.right_target = 0;
+        output.indicator = INDICATOR_TURN_RIGHT;
+    }
+    if (state == NORMAL_COMPLETE) output.complete = 1U;
+    return output;
+}
+
+void NormalMission_Init(void) { state = NORMAL_WAIT_START; }
+void NormalMission_Start(uint32_t now_ms) { (void)now_ms; state = NORMAL_START_FLASH; }
+void NormalMission_Stop(void) { state = NORMAL_WAIT_START; }
+NormalMissionState NormalMission_GetState(void) { return state; }
+
+MissionOutput NormalMission_Update(const NormalMissionInput *input, uint32_t now_ms)
+{
+    (void)now_ms;
+    if (input == 0) return output_for_state();
+    if (input->fatal_error != 0U) state = NORMAL_FAULT;
+    else if ((state == NORMAL_START_FLASH) && (input->start_flash_done != 0U)) state = NORMAL_TRACK_OUT;
+    else if ((state == NORMAL_TRACK_OUT) && (input->red_detected != 0U)) state = NORMAL_RED_WAIT;
+    else if ((state == NORMAL_RED_WAIT) && (input->green_detected != 0U)) state = NORMAL_TRACK_OUT;
+    else if ((state == NORMAL_TRACK_OUT) && (input->obstacle_detected != 0U)) state = NORMAL_OBSTACLE_HOLD;
+    else if ((state == NORMAL_OBSTACLE_HOLD) && (input->hazard_hold_done != 0U)) state = NORMAL_AVOID_TURN;
+    else if ((state == NORMAL_AVOID_TURN) && (input->turn_complete != 0U)) state = NORMAL_RETURN;
+    else if ((state == NORMAL_RETURN) && (input->home_detected != 0U)) state = NORMAL_COMPLETE;
+    return output_for_state();
+}

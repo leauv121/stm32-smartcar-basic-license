@@ -105,8 +105,26 @@ CubeMX 生成的 `main.c`、`gpio.c`、`adc.c`、`tim.c`、`i2c.c`、`dma.c`、`
 - `normal_mission.c/.h`：启动双闪、循迹、红停绿行、障碍停车、转弯、返航和终点停车。
 - `advanced_mission.c/.h`：A、B、C、D 点位、圆圈、八字、多圈计时和挑战任务。
 - `route_detector.c/.h`：根据循迹特征、Yaw、轮速里程和路段上下文产生点位或阶段事件。
+- `command_parser.c/.h`：解析电脑通过 USART3 发送的模式选择、启动、停止、状态查询和故障确认命令。
 
 应用层只调用服务层和控制层接口，不直接读写 HAL 外设。
+
+### 4.6 串口控制协议
+
+上电默认不选择驾照并保持停车。电脑通过 USART3 使用以下 ASCII 命令：
+
+- `MODE=NORMAL`：普通驾照。
+- `MODE=CIRCLE`：高级圆圈。
+- `MODE=EIGHT`：高级八字。
+- `MODE=STABLE`：高级三圈稳定行驶。
+- `MODE=CHALLENGE`：高级圆圈与八字交替挑战。
+- `START`：启动当前已选择模式。
+- `STOP`：立即停车并返回等待。
+- `STATUS?`：返回模式、任务状态、传感器状态和活动故障。
+- `ERRORS?`：返回全部活动故障。
+- `ACK`：故障消失后解除安全停车锁定，不自动启动。
+
+运行期间拒绝 `MODE=...`，必须先停止。严重故障不能被 `START` 绕过。USER 按键仍可启动或停止当前已选择模式。
 
 ## 5 主循环数据流
 

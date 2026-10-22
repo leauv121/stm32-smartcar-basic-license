@@ -383,9 +383,12 @@ git commit -m "feat: add self test and reusable hardware adapters"
 - Create: `Core/Src/app/advanced_mission.c`
 - Create: `Core/Inc/app/route_detector.h`
 - Create: `Core/Src/app/route_detector.c`
+- Create: `Core/Inc/app/command_parser.h`
+- Create: `Core/Src/app/command_parser.c`
 - Create: `tests/native/test_app_controller.c`
 - Create: `tests/native/test_normal_mission.c`
 - Create: `tests/native/test_advanced_mission.c`
+- Create: `tests/native/test_command_parser.c`
 
 **Interfaces:**
 - Produces:
@@ -397,6 +400,8 @@ git commit -m "feat: add self test and reusable hardware adapters"
 - [ ] **Step 1: Write failing app-controller tests**
 
 Verify boot enters self-test, successful self-test enters wait, USER starts the selected mission, USER during run stops, and fatal error enters fault.
+
+Before the controller test, write command-parser tests for `MODE=NORMAL`, `MODE=CIRCLE`, `MODE=EIGHT`, `MODE=STABLE`, `MODE=CHALLENGE`, `START`, `STOP`, `STATUS?`, `ERRORS?`, `ACK`, whitespace, CR/LF and unknown input. Mode changes while running are rejected by `app_controller`, not by the parser.
 
 - [ ] **Step 2: Implement controller transitions**
 
