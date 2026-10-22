@@ -8,7 +8,7 @@
 
 #define MPU6050_PowerOnCalibration 1
 
-/* ÍÓÂİÒÇ·½Ïò¿ØÖÆ¾ØÕó */
+/* é™€èºä»ªæ–¹å‘æ§åˆ¶çŸ©é˜µ */
 static signed char gyro_orientation[9] = { 1, 0, 0,
                                            0, 1, 0,
                                            0, 0, 1};
@@ -53,9 +53,9 @@ unsigned short inv_orientation_matrix_to_scalar(const signed char *mtx)
 }
 
 /**
-* @brief MPU6050×ÔĞ£×¼º¯Êı£¬»áÒÔµ÷ÓÃº¯ÊıÊ±MPU6050µÄ×ËÌ¬×÷Îª²Î¿¼×ø±êÏµ
+* @brief MPU6050è‡ªæ ¡å‡†å‡½æ•°ï¼Œä¼šä»¥è°ƒç”¨å‡½æ•°æ—¶MPU6050çš„å§¿æ€ä½œä¸ºå‚è€ƒåæ ‡ç³»
 * @param None
-* @retval 0 ²âÊÔÍ¨¹ı 1 ²âÊÔÊ§°Ü
+* @retval 0 æµ‹è¯•é€šè¿‡ 1 æµ‹è¯•å¤±è´¥
 */
 uint8_t MPU6050_DMP_AccelGyroCalibration(void)
 {
@@ -87,48 +87,48 @@ uint8_t MPU6050_DMP_AccelGyroCalibration(void)
 }
 
 /**
-* @brief MPU6050 DMP³õÊ¼»¯º¯Êı
+* @brief MPU6050 DMPåˆå§‹åŒ–å‡½æ•°
 * @param None
-* @retval 0 DMP³õÊ¼»¯³É¹¦ ÆäËû DMP³õÊ¼»¯Ê§°Ü
+* @retval 0 DMPåˆå§‹åŒ–æˆåŠŸ å…¶ä»– DMPåˆå§‹åŒ–å¤±è´¥
 */
 uint8_t MPU6050_DMP_Init(void)
 {
 	uint8_t res;
-	if(mpu_init()==0)//³õÊ¼»¯MPU6050
+	if(mpu_init()==0)//åˆå§‹åŒ–MPU6050
 	{	 
-		res = mpu_set_sensors(INV_XYZ_GYRO|INV_XYZ_ACCEL);//ÉèÖÃËùĞèÒªµÄ´«¸ĞÆ÷
+		res = mpu_set_sensors(INV_XYZ_GYRO|INV_XYZ_ACCEL);//è®¾ç½®æ‰€éœ€è¦çš„ä¼ æ„Ÿå™¨
 		if(res)
 		{
 			return 1;
     }			
-		res = mpu_configure_fifo(INV_XYZ_GYRO|INV_XYZ_ACCEL);//ÉèÖÃFIFO
+		res = mpu_configure_fifo(INV_XYZ_GYRO|INV_XYZ_ACCEL);//è®¾ç½®FIFO
 		if(res)
 		{
 			return 2;
     }			
-		res = mpu_set_sample_rate(DEFAULT_MPU_HZ);//ÉèÖÃ²ÉÑùÂÊ
+		res = mpu_set_sample_rate(DEFAULT_MPU_HZ);//è®¾ç½®é‡‡æ ·ç‡
 		if(res)
 		{
 			return 3;
     }			
-		res = dmp_load_motion_driver_firmware();//¼ÓÔØdmp¹Ì¼ş
+		res = dmp_load_motion_driver_firmware();//åŠ è½½dmpå›ºä»¶
 		if(res)
 		{
 			return 4;
     }			
-		res = dmp_set_orientation(inv_orientation_matrix_to_scalar(gyro_orientation));//ÉèÖÃÍÓÂİÒÇ·½Ïò
+		res = dmp_set_orientation(inv_orientation_matrix_to_scalar(gyro_orientation));//è®¾ç½®é™€èºä»ªæ–¹å‘
 		if(res)
 		{
 			return 5;
     }			
-		res = dmp_enable_feature(DMP_FEATURE_6X_LP_QUAT|DMP_FEATURE_TAP|//ÉèÖÃdmp¹¦ÄÜ
+		res = dmp_enable_feature(DMP_FEATURE_6X_LP_QUAT|DMP_FEATURE_TAP|//è®¾ç½®dmpåŠŸèƒ½
 		    DMP_FEATURE_ANDROID_ORIENT|DMP_FEATURE_SEND_RAW_ACCEL|DMP_FEATURE_SEND_CAL_GYRO|
 		    DMP_FEATURE_GYRO_CAL);
 		if(res)
 		{
 			return 6;
 		}
-		res = dmp_set_fifo_rate(DEFAULT_MPU_HZ);//ÉèÖÃDMPÊä³öËÙÂÊ(×î´ó²»³¬¹ı200Hz)
+		res = dmp_set_fifo_rate(DEFAULT_MPU_HZ);//è®¾ç½®DMPè¾“å‡ºé€Ÿç‡(æœ€å¤§ä¸è¶…è¿‡200Hz)
 		if(res)
 		{
 			return 7;
@@ -141,19 +141,19 @@ uint8_t MPU6050_DMP_Init(void)
     }	
 #else
     long gyro[3]={0}, accel[3]={0};		
-		res=mpu_run_self_test(gyro,accel);//×Ô¼ì
+		res=mpu_run_self_test(gyro,accel);//è‡ªæ£€
 		if(res != 0x03)
 		{
 			return 8; 
     }	
 #endif		
-		/* PA8 ÅäÖÃÎªÏÂ½µÑØÖĞ¶Ï£¬Òò´Ë½« MPU INT ÉèÖÃÎªµÍµçÆ½ÓĞĞ§¡£ */
+		/* PA8 é…ç½®ä¸ºä¸‹é™æ²¿ä¸­æ–­ï¼Œå› æ­¤å°† MPU INT è®¾ç½®ä¸ºä½ç”µå¹³æœ‰æ•ˆã€‚ */
 		res = mpu_set_int_level(1);
 		if(res)
 		{
 			return 11;
 		}
-		res = mpu_set_dmp_state(1);//Ê¹ÄÜDMP
+		res = mpu_set_dmp_state(1);//ä½¿èƒ½DMP
 		if(res)
 		{
 			return 9;
@@ -168,11 +168,11 @@ uint8_t MPU6050_DMP_Init(void)
 }
 
 /**
-* @brief MPU6050»ñÈ¡DMP½âËãÖ®ºóÅ·À­½Ç
-* @param pitch ¸©Ñö½ÇÊı¾İ»º³åÖ¸Õë
-* @param roll  ºá¹ö½ÇÊı¾İ»º³åÖ¸Õë
-* @param yaw   º½Ïò½ÇÊı¾İ»º³åÖ¸Õë
-* @retval 0 »ñÈ¡Êı¾İ³É¹¦ 1 »ñÈ¡Êı¾İÊ§°Ü
+* @brief MPU6050è·å–DMPè§£ç®—ä¹‹åæ¬§æ‹‰è§’
+* @param pitch ä¿¯ä»°è§’æ•°æ®ç¼“å†²æŒ‡é’ˆ
+* @param roll  æ¨ªæ»šè§’æ•°æ®ç¼“å†²æŒ‡é’ˆ
+* @param yaw   èˆªå‘è§’æ•°æ®ç¼“å†²æŒ‡é’ˆ
+* @retval 0 è·å–æ•°æ®æˆåŠŸ 1 è·å–æ•°æ®å¤±è´¥
 */
 uint8_t MPU6050_DMP_GetData(float *pitch,float *roll,float *yaw)
 {
@@ -191,9 +191,9 @@ uint8_t MPU6050_DMP_GetData(float *pitch,float *roll,float *yaw)
 	}
 
 	/*
-	 * FIFO ¿ÉÄÜÔÚ OLED¡¢´®¿ÚµÈÈÎÎñÖ´ĞĞÆÚ¼ä»ıÑ¹¶àÖ¡¡£
-	 * Á¬Ğø¶ÁÈ¡²¢Ê¹ÓÃ×îĞÂÒ»Ö¡£¬±ÜÃâÒ»Ö±ÏÔÊ¾¹ıÈ¥µÄ×ËÌ¬¡£
-	 * ÉÏÏŞ 16 Ö¡ÓÃÓÚÏŞÖÆµ¥´Îµ÷ÓÃÊ±¼ä£¬·ÀÖ¹Ö÷Ñ­»·±»³¤ÆÚÕ¼ÓÃ¡£
+	 * FIFO å¯èƒ½åœ¨ OLEDã€ä¸²å£ç­‰ä»»åŠ¡æ‰§è¡ŒæœŸé—´ç§¯å‹å¤šå¸§ã€‚
+	 * è¿ç»­è¯»å–å¹¶ä½¿ç”¨æœ€æ–°ä¸€å¸§ï¼Œé¿å…ä¸€ç›´æ˜¾ç¤ºè¿‡å»çš„å§¿æ€ã€‚
+	 * ä¸Šé™ 16 å¸§ç”¨äºé™åˆ¶å•æ¬¡è°ƒç”¨æ—¶é—´ï¼Œé˜²æ­¢ä¸»å¾ªç¯è¢«é•¿æœŸå ç”¨ã€‚
 	 */
 	do
 	{

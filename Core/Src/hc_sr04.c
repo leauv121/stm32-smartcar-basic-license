@@ -3,7 +3,7 @@
 Hcsr04InfoTypeDef Hcsr04Info;
 
 /**
- * @description: ³¬Éù²¨Ä£¿éµÄÊäÈë²¶»ñ¶¨Ê±Æ÷Í¨µÀ³õÊ¼»¯
+ * @description: è¶…å£°æ³¢æ¨¡å—çš„è¾“å…¥æ•èŽ·å®šæ—¶å™¨é€šé“åˆå§‹åŒ–
  * @param {TIM_HandleTypeDef} *htim
  * @param {uint32_t} Channel
  * @return {*}
@@ -26,24 +26,24 @@ void HC_SR04Init(TIM_HandleTypeDef *htim, uint32_t Channel) {
     }
     /*--------[ Start The ICU Channel ]-------*/
     HAL_TIM_Base_Start_IT(htim);
-    HAL_TIM_IC_Start_IT(htim, Channel);//¿ªÆôÖÐ¶Ï
+    HAL_TIM_IC_Start_IT(htim, Channel);//å¼€å¯ä¸­æ–­
 }
 
 /**
- * @description: HC-SR04´¥·¢
+ * @description: HC-SR04è§¦å‘
  * @param {*}
  * @return {*}
  */
 void HC_SR04Start(void) {
     HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_SET);
-    HAL_Delay(1);  //  10usÒÔÉÏ
+    HAL_Delay(1);  //  10usä»¥ä¸Š
     HAL_GPIO_WritePin(TRIG_GPIO_Port, TRIG_Pin, GPIO_PIN_RESET);
-	  HAL_Delay(1);  //  10usÒÔÉÏ
+	  HAL_Delay(1);  //  10usä»¥ä¸Š
 }
 
 /**
- * @description: ¶¨Ê±Æ÷¼ÆÊýÒç³öÖÐ¶Ï´¦Àíº¯Êý
- * @param {*}    main.cÖÐÖØ¶¨Òåvoid HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+ * @description: å®šæ—¶å™¨è®¡æ•°æº¢å‡ºä¸­æ–­å¤„ç†å‡½æ•°
+ * @param {*}    main.cä¸­é‡å®šä¹‰void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
  * @return {*}
  */
 void Hcsr04TimOverflowIsr(void) {
@@ -51,39 +51,39 @@ void Hcsr04TimOverflowIsr(void) {
 }
 
 /**
- * @description: ÊäÈë²¶»ñ¼ÆËã¸ßµçÆ½Ê±¼ä->¾àÀë
- * @param {*}    main.cÖÐÖØ¶¨Òåvoid HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+ * @description: è¾“å…¥æ•èŽ·è®¡ç®—é«˜ç”µå¹³æ—¶é—´->è·ç¦»
+ * @param {*}    main.cä¸­é‡å®šä¹‰void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
  * @return {*}
  */
 void Hcsr04TimIcIsr(void) {
-    if (Hcsr04Info.edge_state == 0)      //  ²¶»ñÉÏÉýÑØ
+    if (Hcsr04Info.edge_state == 0)      //  æ•èŽ·ä¸Šå‡æ²¿
     {
-        // µÃµ½ÉÏÉýÑØ¿ªÊ¼Ê±¼äT1£¬²¢¸ü¸ÄÊäÈë²¶»ñÎªÏÂ½µÑØ
+        // å¾—åˆ°ä¸Šå‡æ²¿å¼€å§‹æ—¶é—´T1ï¼Œå¹¶æ›´æ”¹è¾“å…¥æ•èŽ·ä¸ºä¸‹é™æ²¿
         Hcsr04Info.t1 = HAL_TIM_ReadCapturedValue(Hcsr04Info.TimerHandle, Hcsr04Info.ic_tim_ch);
         __HAL_TIM_SET_CAPTUREPOLARITY(Hcsr04Info.TimerHandle, Hcsr04Info.ic_tim_ch, TIM_INPUTCHANNELPOLARITY_FALLING);
-        Hcsr04Info.tim_overflow_counter = 0;  //  ¶¨Ê±Æ÷Òç³ö¼ÆÊýÆ÷ÇåÁã
-        Hcsr04Info.edge_state = 1;        //  ÉÏÉýÑØ¡¢ÏÂ½µÑØ²¶»ñ±êÖ¾Î»
-    } else if (Hcsr04Info.edge_state == 1) //  ²¶»ñÏÂ½µÑØ
+        Hcsr04Info.tim_overflow_counter = 0;  //  å®šæ—¶å™¨æº¢å‡ºè®¡æ•°å™¨æ¸…é›¶
+        Hcsr04Info.edge_state = 1;        //  ä¸Šå‡æ²¿ã€ä¸‹é™æ²¿æ•èŽ·æ ‡å¿—ä½
+    } else if (Hcsr04Info.edge_state == 1) //  æ•èŽ·ä¸‹é™æ²¿
     {
-        // ²¶»ñÏÂ½µÑØÊ±¼äT2£¬²¢¼ÆËã¸ßµçÆ½Ê±¼ä
+        // æ•èŽ·ä¸‹é™æ²¿æ—¶é—´T2ï¼Œå¹¶è®¡ç®—é«˜ç”µå¹³æ—¶é—´
         Hcsr04Info.t2 = HAL_TIM_ReadCapturedValue(Hcsr04Info.TimerHandle, Hcsr04Info.ic_tim_ch);
-        Hcsr04Info.t2 += Hcsr04Info.tim_overflow_counter * Hcsr04Info.period; //  ÐèÒª¿¼ÂÇ¶¨Ê±Æ÷Òç³öÖÐ¶Ï
-        Hcsr04Info.high_level_us = Hcsr04Info.t2 - Hcsr04Info.t1; //  ¸ßµçÆ½³ÖÐøÊ±¼ä = ÏÂ½µÑØÊ±¼äµã - ÉÏÉýÑØÊ±¼äµã
-        // ¼ÆËã¾àÀë
+        Hcsr04Info.t2 += Hcsr04Info.tim_overflow_counter * Hcsr04Info.period; //  éœ€è¦è€ƒè™‘å®šæ—¶å™¨æº¢å‡ºä¸­æ–­
+        Hcsr04Info.high_level_us = Hcsr04Info.t2 - Hcsr04Info.t1; //  é«˜ç”µå¹³æŒç»­æ—¶é—´ = ä¸‹é™æ²¿æ—¶é—´ç‚¹ - ä¸Šå‡æ²¿æ—¶é—´ç‚¹
+        // è®¡ç®—è·ç¦»
         Hcsr04Info.distance = (Hcsr04Info.high_level_us / 1000000.0) * 340.0 / 2.0 * 100.0;
-        // ÖØÐÂ¿ªÆôÉÏÉýÑØ²¶»ñ
-        Hcsr04Info.edge_state = 0;  //  Ò»´Î²É¼¯Íê±Ï£¬ÇåÁã
+        // é‡æ–°å¼€å¯ä¸Šå‡æ²¿æ•èŽ·
+        Hcsr04Info.edge_state = 0;  //  ä¸€æ¬¡é‡‡é›†å®Œæ¯•ï¼Œæ¸…é›¶
         __HAL_TIM_SET_CAPTUREPOLARITY(Hcsr04Info.TimerHandle, Hcsr04Info.ic_tim_ch, TIM_INPUTCHANNELPOLARITY_RISING);
     }
 }
 
 /**
- * @description: ¶ÁÈ¡¾àÀë
+ * @description: è¯»å–è·ç¦»
  * @param {*}
  * @return {*}
  */
 float HC_SR04Read(void) {
-    // ²â¾à½á¹ûÏÞ·ù
+    // æµ‹è·ç»“æžœé™å¹…
     if (Hcsr04Info.distance >= 450) {
         Hcsr04Info.distance = 450;
     }

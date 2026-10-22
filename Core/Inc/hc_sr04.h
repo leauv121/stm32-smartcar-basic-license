@@ -9,9 +9,9 @@ typedef struct
     uint16_t tim_overflow_counter;
     uint32_t prescaler;
     uint32_t period;
-    uint32_t t1;	//	ÉÏÉıÑØÊ±¼ä
-    uint32_t t2;	//	ÏÂ½µÑØÊ±¼ä
-    uint32_t high_level_us;	//	¸ßµçÆ½³ÖĞøÊ±¼ä
+    uint32_t t1;	//	ä¸Šå‡æ²¿æ—¶é—´
+    uint32_t t2;	//	ä¸‹é™æ²¿æ—¶é—´
+    uint32_t high_level_us;	//	é«˜ç”µå¹³æŒç»­æ—¶é—´
     float    distance;
     TIM_HandleTypeDef* TimerHandle;
     TIM_TypeDef* instance;
@@ -22,7 +22,7 @@ typedef struct
 extern Hcsr04InfoTypeDef Hcsr04Info;
 
 /**
- * @description: ³¬Éù²¨Ä£¿éµÄÊäÈë²¶»ñ¶¨Ê±Æ÷Í¨µÀ³õÊ¼»¯
+ * @description: è¶…å£°æ³¢æ¨¡å—çš„è¾“å…¥æ•è·å®šæ—¶å™¨é€šé“åˆå§‹åŒ–
  * @param {TIM_HandleTypeDef} *htim
  * @param {uint32_t} Channel
  * @return {*}
@@ -30,28 +30,28 @@ extern Hcsr04InfoTypeDef Hcsr04Info;
 void HC_SR04Init(TIM_HandleTypeDef *htim, uint32_t Channel);
 
 /**
- * @description: HC-SR04´¥·¢
+ * @description: HC-SR04è§¦å‘
  * @param {*}
  * @return {*}
  */
 void HC_SR04Start(void);
 
 /**
- * @description: ¶¨Ê±Æ÷¼ÆÊıÒç³öÖĞ¶Ï´¦Àíº¯Êı
- * @param {*}    main.cÖĞÖØ¶¨Òåvoid HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
+ * @description: å®šæ—¶å™¨è®¡æ•°æº¢å‡ºä¸­æ–­å¤„ç†å‡½æ•°
+ * @param {*}    main.cä¸­é‡å®šä¹‰void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
  * @return {*}
  */
 void Hcsr04TimOverflowIsr(void);
 
 /**
- * @description: ÊäÈë²¶»ñ¼ÆËã¸ßµçÆ½Ê±¼ä->¾àÀë
- * @param {*}    main.cÖĞÖØ¶¨Òåvoid HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+ * @description: è¾“å…¥æ•è·è®¡ç®—é«˜ç”µå¹³æ—¶é—´->è·ç¦»
+ * @param {*}    main.cä¸­é‡å®šä¹‰void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
  * @return {*}
  */
 void Hcsr04TimIcIsr(void);
 
 /**
- * @description: ¶ÁÈ¡¾àÀë
+ * @description: è¯»å–è·ç¦»
  * @param {*}
  * @return {*}
  */

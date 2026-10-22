@@ -27,8 +27,8 @@
 #include "mpu6050.h"
 
 
-#define MPU6050							//¶¨ÒåÎÒÃÇÊ¹ÓÃµÄ´«¸ĞÆ÷ÎªMPU6050
-#define MOTION_DRIVER_TARGET_MSP430		//¶¨ÒåÇı¶¯²¿·Ö,²ÉÓÃMSP430µÄÇı¶¯(ÒÆÖ²µ½STM32)
+#define MPU6050							//å®šä¹‰æˆ‘ä»¬ä½¿ç”¨çš„ä¼ æ„Ÿå™¨ä¸ºMPU6050
+#define MOTION_DRIVER_TARGET_MSP430		//å®šä¹‰é©±åŠ¨éƒ¨åˆ†,é‡‡ç”¨MSP430çš„é©±åŠ¨(ç§»æ¤åˆ°STM32)
 
 /* The following functions must be defined for this platform:
  * i2c_write(unsigned char slave_addr, unsigned char reg_addr,
@@ -57,8 +57,8 @@
 //    return msp430_reg_int_cb(int_param->cb, int_param->pin, int_param->lp_exit,
 //        int_param->active_low);
 //}
-#define log_i 	printf	//´òÓ¡ĞÅÏ¢
-#define log_e  	printf	//´òÓ¡ĞÅÏ¢
+#define log_i 	printf	//æ‰“å°ä¿¡æ¯
+#define log_e  	printf	//æ‰“å°ä¿¡æ¯
 /* labs is already defined by TI's toolchain. */
 /* fabs is for doubles. fabsf is for floats. */
 #define fabs        fabsf

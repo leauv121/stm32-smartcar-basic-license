@@ -22,7 +22,7 @@
 #define _INV_MPU_H_
 #include "main.h"
 
-//¶¨Òå²ÉÑùÂÊ
+//å®šä¹‰é‡‡æ ·ç‡
 #define DEFAULT_MPU_HZ  (100)		
 
 #define INV_X_GYRO      (0x40)
@@ -32,7 +32,7 @@
 #define INV_XYZ_ACCEL   (0x08)
 #define INV_XYZ_COMPASS (0x01)
 
-//ÒÆÖ²¹Ù·½MSP430 DMPÇı¶¯
+//ç§»æ¤å®˜æ–¹MSP430 DMPé©±åŠ¨
 struct int_param_s {
 //#if defined EMPL_TARGET_MSP430 || defined MOTION_DRIVER_TARGET_MSP430
     void (*cb)(void);
