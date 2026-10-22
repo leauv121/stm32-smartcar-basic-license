@@ -33,6 +33,11 @@ $sourceMap = @{
         'Core\Src\app\advanced_mission.c',
         'Core\Src\services\error_manager.c'
     )
+    'test_self_test.c' = @(
+        'Core\Src\services\self_test.c',
+        'Core\Src\services\error_manager.c'
+    )
+    'test_driver_algorithms.c' = @('Core\Src\services\driver_algorithms.c')
 }
 
 $tests = Get-ChildItem -LiteralPath $nativeRoot -Filter 'test_*.c' | Sort-Object Name

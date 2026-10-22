@@ -1,4 +1,5 @@
 #include "hc_sr04.h"
+#include "services/driver_algorithms.h"
 
 Hcsr04InfoTypeDef Hcsr04Info;
 
@@ -70,7 +71,7 @@ void Hcsr04TimIcIsr(void) {
         Hcsr04Info.t2 += Hcsr04Info.tim_overflow_counter * Hcsr04Info.period; //  需要考虑定时器溢出中断
         Hcsr04Info.high_level_us = Hcsr04Info.t2 - Hcsr04Info.t1; //  高电平持续时间 = 下降沿时间点 - 上升沿时间点
         // 计算距离
-        Hcsr04Info.distance = (Hcsr04Info.high_level_us / 1000000.0) * 340.0 / 2.0 * 100.0;
+        Hcsr04Info.distance = DriverAlgorithms_UltrasonicCm(Hcsr04Info.high_level_us);
         // 重新开启上升沿捕获
         Hcsr04Info.edge_state = 0;  //  一次采集完毕，清零
         __HAL_TIM_SET_CAPTUREPOLARITY(Hcsr04Info.TimerHandle, Hcsr04Info.ic_tim_ch, TIM_INPUTCHANNELPOLARITY_RISING);
@@ -87,7 +88,7 @@ float HC_SR04Read(void) {
     if (Hcsr04Info.distance >= 450) {
         Hcsr04Info.distance = 450;
     }
-    return Hcsr04Info.distance-3.8;
+    return Hcsr04Info.distance;
 }
 
 

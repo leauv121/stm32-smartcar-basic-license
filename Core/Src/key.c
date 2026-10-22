@@ -1,4 +1,10 @@
 #include "key.h"
+#include "services/driver_algorithms.h"
+
+#define KEY_DEBOUNCE_MS 20U
+
+static KeyDebounceState key_debounce;
+static uint8_t key_debounce_initialized;
 
 uint8_t Key_Scan(void)
 {
@@ -20,16 +26,23 @@ uint8_t key_old;
 
 uint16_t Key_Proc(void)
 {
+    return Key_ProcAt(HAL_GetTick());
+}
+
+uint16_t Key_ProcAt(uint32_t now_ms)
+{
     key_rval = Key_Scan();
-
-    key_down = key_rval & (key_rval ^ key_old);
-    key_up = ~key_rval & (key_rval ^ key_old);
-    key_old = key_rval;
-
-    if (key_down == 1)
+    if (key_debounce_initialized == 0U)
     {
-        return 1;
+        DriverAlgorithms_KeyInit(&key_debounce, key_rval, now_ms);
+        key_debounce_initialized = 1U;
+        key_old = key_rval;
+        return 0U;
     }
 
-    return 0;
+    key_down = DriverAlgorithms_KeyUpdate(&key_debounce, key_rval,
+                                           now_ms, KEY_DEBOUNCE_MS);
+    key_up = (uint8_t)((key_old != 0U) && (key_debounce.stable_level == 0U));
+    key_old = key_debounce.stable_level;
+    return (uint16_t)key_down;
 }

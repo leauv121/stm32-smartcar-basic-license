@@ -4,7 +4,7 @@
 #define Speed_Measure_TIM_Handler    htim4
 #define Speed_Measure_LEFT_CHANNEL   TIM_CHANNEL_4
 #define Speed_Measure_RIGHT_CHANNEL  TIM_CHANNEL_3
-#define Speed_Measure_TIM_Period     10000U
+#define Speed_Measure_TIM_TickHz     10000U
 #define Speed_Measure_SAMPLE_COUNT   20U
 
 typedef struct
@@ -35,7 +35,8 @@ static void Speed_Measure_CalculateData(Speed_MeasureState *state)
     state->measure_count = 0U;
     if (data_count > 0U)
     {
-        state->motor_speed = Speed_Measure_TIM_Period / (float)data_count;
+        /* 单位为转/秒：20 个孔的 20 个脉冲间隔正好是一整圈。 */
+        state->motor_speed = Speed_Measure_TIM_TickHz / (float)data_count;
     }
     else
     {
@@ -90,12 +91,26 @@ void Speed_MeasureTimOverflowHandler(void)
         (left_measure.measure_complt_flag == 0U))
     {
         left_measure.measure_overflowcount++;
+        if (left_measure.measure_overflowcount >= 1U)
+        {
+            left_measure.motor_speed = 0.0f;
+            left_measure.measure_interval_flag = 0U;
+            left_measure.measure_count = 0U;
+            left_measure.measure_complt_flag = 1U;
+        }
     }
 
     if ((right_measure.measure_interval_flag != 0U) &&
         (right_measure.measure_complt_flag == 0U))
     {
         right_measure.measure_overflowcount++;
+        if (right_measure.measure_overflowcount >= 1U)
+        {
+            right_measure.motor_speed = 0.0f;
+            right_measure.measure_interval_flag = 0U;
+            right_measure.measure_count = 0U;
+            right_measure.measure_complt_flag = 1U;
+        }
     }
 }
 
@@ -137,7 +152,7 @@ void Speed_MeasureTimIcHandler(uint32_t channel)
         state->measure_buffer[state->measure_count] =
             state->measure_interval_buffer[1] -
             state->measure_interval_buffer[0] +
-            Speed_Measure_TIM_Handler.Init.Period *
+            (Speed_Measure_TIM_Handler.Init.Period + 1U) *
             state->measure_overflowcount;
 
         state->measure_count++;
