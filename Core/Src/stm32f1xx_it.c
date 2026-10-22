@@ -41,7 +41,7 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-extern volatile uint8_t control_tick_50ms;
+extern volatile uint8_t control_tick_20ms;
 
 /* USER CODE END PV */
 
@@ -193,10 +193,11 @@ void SysTick_Handler(void)
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
   sys_count++;
-  if (sys_count >= 50U)
+  /* 20ms控制周期提高弯道响应速度，同时仍让耗时工作留在主循环。 */
+  if (sys_count >= 20U)
   {
     sys_count = 0U;
-    control_tick_50ms = 1U;
+    control_tick_20ms = 1U;
   }
   /* USER CODE END SysTick_IRQn 1 */
 }

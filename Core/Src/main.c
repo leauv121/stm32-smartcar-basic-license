@@ -79,7 +79,7 @@ typedef enum
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
-volatile uint8_t control_tick_50ms = 0U;
+volatile uint8_t control_tick_20ms = 0U;
 volatile uint8_t mems_data_rdy_flag = 0U;
 volatile uint8_t init_flag = 0U;
 /* key.c 通过 extern 使用该值完成按键边沿检测。 */
@@ -99,6 +99,7 @@ static float Pitch = 0.0f;
 static float Roll = 0.0f;
 static float Yaw = 0.0f;
 static float tracking_last_yaw = 0.0f;
+static float tracking_last_delta = 0.0f;
 static float tracking_progress = 0.0f;
 static uint32_t last_mpu_poll_ms = 0U;
 static uint32_t last_display_ms = 0U;
@@ -137,6 +138,7 @@ static void Tracking_Mission_Reset(void)
   tracking_state = TRACK_WAIT_START;
   tracking_progress = 0.0f;
   tracking_last_yaw = Yaw;
+  tracking_last_delta = 0.0f;
   tracking_yaw_valid = mpu_sample_valid;
   Line_Following_PID_Reset();
   Smart_Car_Stop();
@@ -168,8 +170,10 @@ static void Tracking_Mission_Start(void)
 
   tracking_progress = 0.0f;
   tracking_last_yaw = Yaw;
+  tracking_last_delta = 0.0f;
   tracking_yaw_valid = 1U;
-  Line_Following_PID_Reset();
+  /* 用启动位置的实际偏差预置PID，避免第一次控制产生突然转向。 */
+  Line_Following_PID_Prime(adc_dma_data[0], adc_dma_data[1]);
   tracking_state = TRACK_CW;
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
   printf("TRACK MISSION START: CW 2 LAPS\r\n");
@@ -201,6 +205,7 @@ static void Tracking_Mission_Update_Yaw(float current_yaw)
     yaw_delta += 360.0f;
   }
   tracking_last_yaw = current_yaw;
+  tracking_last_delta = yaw_delta;
 
   if ((tracking_state == TRACK_WAIT_START) ||
       (tracking_state == TRACK_COMPLETE) ||
@@ -229,6 +234,7 @@ static void Tracking_Mission_Update_Yaw(float current_yaw)
     tracking_state = TRACK_TURN_AROUND;
     tracking_progress = 0.0f;
     tracking_last_yaw = current_yaw;
+    printf("CW COMPLETE -> TURN\r\n");
   }
   else if ((tracking_state == TRACK_TURN_AROUND) &&
            (tracking_progress >= TRACK_TURN_TARGET_DEG))
@@ -238,6 +244,7 @@ static void Tracking_Mission_Update_Yaw(float current_yaw)
     tracking_state = TRACK_CCW;
     tracking_progress = 0.0f;
     tracking_last_yaw = current_yaw;
+    printf("TURN COMPLETE -> CCW\r\n");
   }
   else if ((tracking_state == TRACK_CCW) &&
            (tracking_progress >= TRACK_CCW_TARGET_DEG))
@@ -247,6 +254,7 @@ static void Tracking_Mission_Update_Yaw(float current_yaw)
     tracking_state = TRACK_COMPLETE;
     tracking_progress = TRACK_CCW_TARGET_DEG;
     HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+    printf("CCW COMPLETE -> DONE\r\n");
   }
 }
 
@@ -270,7 +278,7 @@ static void Tracking_Mission_Process(uint8_t control_tick_due)
       {
         uint16_t left_adc = adc_dma_data[0];
         uint16_t right_adc = adc_dma_data[1];
-        Line_Following_PID(left_adc, right_adc);
+        Line_Following_Hybrid(left_adc, right_adc);
       }
       break;
 
@@ -389,12 +397,14 @@ static void OLED_Update_Tracking_Mission(void)
   */
 static void UART_Report_Tracking_Mission(void)
 {
-  printf("TRACK:%s L:%u R:%u PID:%ld YAW:%.2f DEG:%.1f\r\n",
+  printf("TRACK:%s EDGE:%c L:%u R:%u PID:%ld YAW:%.2f DYAW:%.2f DEG:%.1f\r\n",
          Tracking_State_Text(),
+         Line_Following_Get_Mode(),
          adc_dma_data[0],
          adc_dma_data[1],
          (long)Line_Following_PID_GetOutput(),
          Yaw,
+         tracking_last_delta,
          tracking_progress);
 }
 /* USER CODE END 0 */
@@ -430,52 +440,103 @@ int main(void)
   OLED_ShowString(0, 0, "TRACK INIT      ", 16);
 
   /*
+   * 上电诊断标记：直接调用HAL发送，不依赖printf重定向。
+   * 如果串口能看到BOOT UART OK，说明USART3链路正常；OLED后续文字用于定位阻塞步骤。
+   */
+  HAL_UART_Transmit(&huart3,
+                    (uint8_t *)"BOOT UART OK\r\n",
+                    14U,
+                    100U);
+
+  /*
    * 按指导书顺序启动ADC和DMA。
    * DMA循环搬运两个Rank：左侧PB0/IN8在下标0，右侧PA7/IN7在下标1。
    */
+  OLED_ShowString(0, 2, "ADC CAL         ", 16);
   if (HAL_ADCEx_Calibration_Start(&hadc1) != HAL_OK)
   {
     adc_error_state = ADC_ERROR_CALIBRATION;
-  }
-  else if (HAL_ADC_Start(&hadc1) != HAL_OK)
-  {
-    adc_error_state = ADC_ERROR_START;
-  }
-  else if (HAL_ADC_Start_DMA(&hadc1,
-                             (uint32_t *)adc_dma_data,
-                             ADC_CHANNEL_COUNT) != HAL_OK)
-  {
-    adc_error_state = ADC_ERROR_DMA;
+    OLED_ShowString(0, 2, "ADC CAL ERROR   ", 16);
   }
   else
   {
-    adc_ready = 1U;
-    printf("ADC DMA START OK: LEFT_IN8 RIGHT_IN7\r\n");
+    /* 将校准、普通启动、DMA启动逐步显示，避免多个调用共用一个模糊提示。 */
+    OLED_ShowString(0, 2, "ADC CAL OK      ", 16);
+    HAL_UART_Transmit(&huart3, (uint8_t *)"ADC CAL OK\r\n", 12U, 100U);
+
+    OLED_ShowString(0, 2, "ADC START       ", 16);
+    if (HAL_ADC_Start(&hadc1) != HAL_OK)
+    {
+      adc_error_state = ADC_ERROR_START;
+      OLED_ShowString(0, 2, "ADC START ERROR ", 16);
+    }
+    else
+    {
+      OLED_ShowString(0, 2, "ADC START OK    ", 16);
+      HAL_UART_Transmit(&huart3, (uint8_t *)"ADC START OK\r\n", 14U, 100U);
+
+      OLED_ShowString(0, 2, "ADC DMA START   ", 16);
+
+      /*
+       * HAL_ADC_Start_DMA会默认打开DMA半完成和完成中断。
+       * 本实验只需主循环读取循环DMA中的最新值，不使用这两个高频回调；
+       * 两路、1.5周期采样会产生极密集的中断，导致主循环、按键和OLED全部饿死。
+       * 因此启动期间先屏蔽NVIC，随后关闭HT/TC，只保留TE错误中断。
+       */
+      HAL_NVIC_DisableIRQ(DMA1_Channel1_IRQn);
+      if (HAL_ADC_Start_DMA(&hadc1,
+                            (uint32_t *)adc_dma_data,
+                            ADC_CHANNEL_COUNT) != HAL_OK)
+      {
+        adc_error_state = ADC_ERROR_DMA;
+        OLED_ShowString(0, 2, "ADC DMA ERROR   ", 16);
+      }
+      else
+      {
+        adc_ready = 1U;
+        OLED_ShowString(0, 2, "ADC DMA OK      ", 16);
+        printf("ADC DMA START OK: LEFT_IN8 RIGHT_IN7\r\n");
+      }
+
+      __HAL_DMA_DISABLE_IT(&hdma_adc1, DMA_IT_HT | DMA_IT_TC);
+      HAL_NVIC_ClearPendingIRQ(DMA1_Channel1_IRQn);
+      HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
+    }
   }
 
   /*
    * 恢复MPU6050姿态链路：地址探测、DMP初始化、外部中断加10ms主动补读。
    * OLED和串口不放在FIFO消费路径中，防止再次出现生产快于消费的问题。
    */
+  OLED_ShowString(0, 4, "MPU SCAN        ", 16);
   mpu_detected_address = MPU6050_DetectAddress();
   if (mpu_detected_address == 0U)
   {
     mpu_error_state = MPU_ERROR_NOT_FOUND;
+    OLED_ShowString(0, 4, "MPU NOT FOUND   ", 16);
     printf("MPU6050 not found at 0x68 or 0x69\r\n");
   }
   else
   {
+    /* DMP初始化包含上电静止校准，期间按键任务尚未启动，请保持小车不动。 */
+    OLED_ShowString(0, 4, "MPU DMP CAL     ", 16);
+    HAL_UART_Transmit(&huart3,
+                      (uint8_t *)"MPU DMP CAL START\r\n",
+                      19U,
+                      100U);
     mpu_init_result = MPU6050_DMP_Init();
     if (mpu_init_result == 0U)
     {
       mpu_ready = 1U;
       init_flag = 1U;
+      OLED_ShowString(0, 4, "MPU DMP OK      ", 16);
       printf("MPU6050 DMP init success at 0x%02X\r\n",
              mpu_detected_address);
     }
     else
     {
       mpu_error_state = MPU_ERROR_DMP_INIT;
+      OLED_ShowString(0, 4, "MPU DMP ERROR   ", 16);
       printf("MPU6050 DMP init failed, addr:0x%02X code:%u\r\n",
              mpu_detected_address,
              mpu_init_result);
@@ -534,11 +595,11 @@ int main(void)
       }
     }
 
-    /* 原子取走一次50ms请求；阻塞后不补跑多个PID周期。 */
+    /* 原子取走一次20ms请求；阻塞后不补跑多个PID周期。 */
     __disable_irq();
-    if (control_tick_50ms == 1U)
+    if (control_tick_20ms == 1U)
     {
-      control_tick_50ms = 0U;
+      control_tick_20ms = 0U;
       control_tick_due = 1U;
     }
     __enable_irq();

@@ -12,6 +12,9 @@ void Smart_Car_Go_Straight_Fast(void);
 void Smart_Car_Stop(void);
 void Line_Following_PID(uint16_t left_adc, uint16_t right_adc);
 void Line_Following_PID_Reset(void);
+void Line_Following_PID_Prime(uint16_t left_adc, uint16_t right_adc);
+void Line_Following_Hybrid(uint16_t left_adc, uint16_t right_adc);
 int32_t Line_Following_PID_GetOutput(void);
+char Line_Following_Get_Mode(void);
 
 #endif

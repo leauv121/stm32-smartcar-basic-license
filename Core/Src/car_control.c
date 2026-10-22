@@ -6,17 +6,57 @@
 #define TRACKING_INNER_SPEED 2800U
 #define TRACKING_STOP_SPEED     0U
 
-/* 指导书第 11.3 节给出的第一组 PID 参数，先保持原值进行实车验证。 */
-#define PID_KP          1.5f
-#define PID_KI          0.05f
-#define PID_KD          2.0f
-#define PID_BASE_SPEED  3500
-#define PID_MAX_SPEED   7200
-#define PID_I_LIMIT     8000
+/*
+ * 指导书第11.3节说明PID参数需要根据实车调整。
+ * 第一轮以稳定为主：减弱积分和微分，避免直线段反复摆动。
+ */
+#define PID_KP                 1.0f
+#define PID_KI                 0.0f
+#define PID_KD                 0.5f
+#define PID_START_SPEED        1800
+#define PID_BASE_SPEED         3700
+#define PID_MAX_SPEED          6500
+#define PID_I_LIMIT            8000
+#define PID_ERROR_DEADBAND       60
+#define PID_SOFT_START_STEP      60
 
 static int32_t pid_last_error = 0;
 static int32_t pid_integral = 0;
 static int32_t pid_output = 0;
+static int32_t pid_base_speed = PID_START_SPEED;
+static uint8_t pid_primed = 0U;
+static char line_following_mode = 'N';
+
+/**
+  * @brief  计算带中心死区的双路模拟传感器偏差
+  * @param  left_adc  左内侧传感器ADC值
+  * @param  right_adc 右内侧传感器ADC值
+  * @retval 处理后的偏差，正负方向与指导书保持一致
+  */
+static int32_t Line_Following_Get_Error(uint16_t left_adc, uint16_t right_adc)
+{
+  int32_t error = (int32_t)right_adc - (int32_t)left_adc;
+
+  if ((error <= PID_ERROR_DEADBAND) &&
+      (error >= -PID_ERROR_DEADBAND))
+  {
+    error = 0;
+  }
+
+  return error;
+}
+
+/**
+  * @brief  从外侧急弯控制切回PID时同步历史误差
+  * @note   保留当前基础速度，避免每次出弯都重新慢速启动。
+  */
+static void Line_Following_PID_Resume(uint16_t left_adc, uint16_t right_adc)
+{
+  pid_last_error = Line_Following_Get_Error(left_adc, right_adc);
+  pid_integral = 0;
+  pid_output = 0;
+  pid_primed = 1U;
+}
 
 /**
   * @brief  小车强左转
@@ -110,7 +150,14 @@ void Line_Following_PID(uint16_t left_adc, uint16_t right_adc)
   int32_t right_speed;
 
   /* 指导书规定偏差为“右侧采样值减左侧采样值”。 */
-  error = (int32_t)right_adc - (int32_t)left_adc;
+  error = Line_Following_Get_Error(left_adc, right_adc);
+
+  /* 防止未显式预置时首次计算产生很大的微分冲击。 */
+  if (pid_primed == 0U)
+  {
+    pid_last_error = error;
+    pid_primed = 1U;
+  }
 
   /* 积分限幅用于避免长时间偏向一侧时积分无限累积。 */
   pid_integral += error;
@@ -128,8 +175,18 @@ void Line_Following_PID(uint16_t left_adc, uint16_t right_adc)
                          PID_KD * (float)(error - pid_last_error));
   pid_last_error = error;
 
-  left_speed = PID_BASE_SPEED + pid_output;
-  right_speed = PID_BASE_SPEED - pid_output;
+  /* 启动后逐步提高基础速度，避免电机从静止瞬间跳到正常速度。 */
+  if (pid_base_speed < PID_BASE_SPEED)
+  {
+    pid_base_speed += PID_SOFT_START_STEP;
+    if (pid_base_speed > PID_BASE_SPEED)
+    {
+      pid_base_speed = PID_BASE_SPEED;
+    }
+  }
+
+  left_speed = pid_base_speed + pid_output;
+  right_speed = pid_base_speed - pid_output;
 
   if (left_speed > PID_MAX_SPEED)
   {
@@ -163,6 +220,77 @@ void Line_Following_PID_Reset(void)
   pid_last_error = 0;
   pid_integral = 0;
   pid_output = 0;
+  pid_base_speed = PID_START_SPEED;
+  pid_primed = 0U;
+  line_following_mode = 'N';
+}
+
+/**
+  * @brief  使用启动瞬间的传感器偏差预置PID，消除第一次微分突跳
+  * @param  left_adc  左内侧传感器ADC值
+  * @param  right_adc 右内侧传感器ADC值
+  * @retval None
+  */
+void Line_Following_PID_Prime(uint16_t left_adc, uint16_t right_adc)
+{
+  int32_t error = Line_Following_Get_Error(left_adc, right_adc);
+
+  pid_last_error = error;
+  pid_integral = 0;
+  pid_output = 0;
+  pid_base_speed = PID_START_SPEED;
+  pid_primed = 1U;
+  line_following_mode = 'N';
+}
+
+/**
+  * @brief  四传感器混合循迹：外侧DO救援急弯，中间AO执行连续PID
+  * @param  left_adc  左内侧PB0/ADC1_IN8模拟值
+  * @param  right_adc 右内侧PA7/ADC1_IN7模拟值
+  * @note   LINE1为外右PA6，LINE4为外左PB1；高电平表示检测到黑线。
+  */
+void Line_Following_Hybrid(uint16_t left_adc, uint16_t right_adc)
+{
+  GPIO_PinState outer_right;
+  GPIO_PinState outer_left;
+  char previous_mode = line_following_mode;
+
+  outer_right = HAL_GPIO_ReadPin(LINE1_GPIO_Port, LINE1_Pin);
+  outer_left = HAL_GPIO_ReadPin(LINE4_GPIO_Port, LINE4_Pin);
+
+  if ((outer_right == GPIO_PIN_SET) &&
+      (outer_left == GPIO_PIN_RESET))
+  {
+    /* 外右压到黑线，说明弯道已超出中间PID范围，优先强右转。 */
+    line_following_mode = 'R';
+    Smart_Car_Turn_Right();
+  }
+  else if ((outer_left == GPIO_PIN_SET) &&
+           (outer_right == GPIO_PIN_RESET))
+  {
+    /* 外左压到黑线，优先强左转，把黑线送回中间两个传感器之间。 */
+    line_following_mode = 'L';
+    Smart_Car_Turn_Left();
+  }
+  else
+  {
+    line_following_mode = 'N';
+    if (previous_mode != 'N')
+    {
+      /* 救援结束后同步当前误差，避免微分项因模式切换产生突跳。 */
+      Line_Following_PID_Resume(left_adc, right_adc);
+    }
+    Line_Following_PID(left_adc, right_adc);
+  }
+}
+
+/**
+  * @brief  返回当前循迹来源，供低频串口诊断
+  * @retval N=中间PID，R=外右急弯救援，L=外左急弯救援
+  */
+char Line_Following_Get_Mode(void)
+{
+  return line_following_mode;
 }
 
 /**
