@@ -16,6 +16,11 @@ $sourceMap = @{
     )
     'test_indicator_service.c' = @('Core\Src\services\indicator_service.c')
     'test_diagnostic_view.c' = @('Core\Src\services\diagnostic_view.c')
+    'test_scheduler.c' = @('Core\Src\services\scheduler.c')
+    'test_sensor_service.c' = @(
+        'Core\Src\services\error_manager.c',
+        'Core\Src\services\sensor_service.c'
+    )
 }
 
 $tests = Get-ChildItem -LiteralPath $nativeRoot -Filter 'test_*.c' | Sort-Object Name
