@@ -3,7 +3,8 @@
 
 /* 数字循迹转向函数保留给自动掉头；PID 循迹使用下面单独的参数。 */
 #define TRACKING_OUTER_SPEED 4500U
-#define TRACKING_INNER_SPEED 2800U
+/* 外侧急弯救援的内轮保持低速前进，减轻从PID切换时的停车顿挫。 */
+#define TRACKING_INNER_SPEED 1400U
 #define TRACKING_STOP_SPEED     0U
 
 /*
@@ -261,16 +262,16 @@ void Line_Following_Hybrid(uint16_t left_adc, uint16_t right_adc)
   if ((outer_right == GPIO_PIN_SET) &&
       (outer_left == GPIO_PIN_RESET))
   {
-    /* 外右压到黑线，说明弯道已超出中间PID范围，优先强右转。 */
+    /* 外右压到黑线时使用低速内轮差速右转，兼顾转弯半径和连续性。 */
     line_following_mode = 'R';
-    Smart_Car_Turn_Right();
+    Smart_Car_Turn_Right_Weak();
   }
   else if ((outer_left == GPIO_PIN_SET) &&
            (outer_right == GPIO_PIN_RESET))
   {
-    /* 外左压到黑线，优先强左转，把黑线送回中间两个传感器之间。 */
+    /* 外左压到黑线时使用低速内轮差速左转，把黑线送回中间区域。 */
     line_following_mode = 'L';
-    Smart_Car_Turn_Left();
+    Smart_Car_Turn_Left_Weak();
   }
   else
   {
