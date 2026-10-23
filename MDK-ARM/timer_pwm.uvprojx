@@ -337,7 +337,7 @@
               <MiscControls />
               <Define>USE_HAL_DRIVER,STM32F103xB</Define>
               <Undefine />
-              <IncludePath>../Core/Inc;../Core/Src/MPU6050_DMP/MPU6050_DMP;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Core/Inc/app;../Core/Inc/config;../Core/Inc/control;../Core/Inc/services;../Core/Src/MPU6050_DMP/MPU6050_DMP;../Drivers/STM32F1xx_HAL_Driver/Inc;../Drivers/STM32F1xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F1xx/Include;../Drivers/CMSIS/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -691,6 +691,31 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/stm32f1xx_hal_msp.c</FilePath>
             </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Application/FinalWork</GroupName>
+          <Files>
+            <File><FileName>motion_control.c</FileName><FileType>1</FileType><FilePath>../Core/Src/control/motion_control.c</FilePath></File>
+            <File><FileName>line_follow_control.c</FileName><FileType>1</FileType><FilePath>../Core/Src/control/line_follow_control.c</FilePath></File>
+            <File><FileName>turn_control.c</FileName><FileType>1</FileType><FilePath>../Core/Src/control/turn_control.c</FilePath></File>
+            <File><FileName>error_manager.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/error_manager.c</FilePath></File>
+            <File><FileName>safety_service.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/safety_service.c</FilePath></File>
+            <File><FileName>indicator_service.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/indicator_service.c</FilePath></File>
+            <File><FileName>diagnostic_view.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/diagnostic_view.c</FilePath></File>
+            <File><FileName>scheduler.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/scheduler.c</FilePath></File>
+            <File><FileName>sensor_service.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/sensor_service.c</FilePath></File>
+            <File><FileName>self_test.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/self_test.c</FilePath></File>
+            <File><FileName>hardware_adapter.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/hardware_adapter.c</FilePath></File>
+            <File><FileName>driver_algorithms.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/driver_algorithms.c</FilePath></File>
+            <File><FileName>display_service.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/display_service.c</FilePath></File>
+            <File><FileName>uart_command_service.c</FileName><FileType>1</FileType><FilePath>../Core/Src/services/uart_command_service.c</FilePath></File>
+            <File><FileName>app_controller.c</FileName><FileType>1</FileType><FilePath>../Core/Src/app/app_controller.c</FilePath></File>
+            <File><FileName>normal_mission.c</FileName><FileType>1</FileType><FilePath>../Core/Src/app/normal_mission.c</FilePath></File>
+            <File><FileName>advanced_mission.c</FileName><FileType>1</FileType><FilePath>../Core/Src/app/advanced_mission.c</FilePath></File>
+            <File><FileName>route_detector.c</FileName><FileType>1</FileType><FilePath>../Core/Src/app/route_detector.c</FilePath></File>
+            <File><FileName>command_parser.c</FileName><FileType>1</FileType><FilePath>../Core/Src/app/command_parser.c</FilePath></File>
+            <File><FileName>app_runtime.c</FileName><FileType>1</FileType><FilePath>../Core/Src/app/app_runtime.c</FilePath></File>
           </Files>
         </Group>
         <Group>
