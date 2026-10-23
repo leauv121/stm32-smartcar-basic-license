@@ -1,5 +1,6 @@
 ﻿#include "car_control.h"
 #include "control/motion_control.h"
+#include "services/safety_service.h"
 
 static void CarControl_Apply(int16_t left, int16_t right)
 {
@@ -7,6 +8,7 @@ static void CarControl_Apply(int16_t left, int16_t right)
   request.mode = ((left == 0) && (right == 0)) ? MOTION_STOP : MOTION_DRIVE;
   request.left_target = left;
   request.right_target = right;
+  request = SafetyService_Resolve(request, 0U, 0U);
   MotionControl_Apply(request);
 }
 

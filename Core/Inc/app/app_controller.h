@@ -22,6 +22,7 @@ typedef enum
     APP_RESULT_BUSY,
     APP_RESULT_MODE_REQUIRED,
     APP_RESULT_FATAL_LOCKED,
+    APP_RESULT_ACK_REQUIRED,
     APP_RESULT_INVALID_MODE
 } AppCommandResult;
 
@@ -38,6 +39,7 @@ typedef struct
     uint8_t self_test_complete;
     uint8_t self_test_safe;
     uint8_t user_button_pressed;
+    uint8_t stop_latched;
     AppCommand command;
     NormalMissionInput normal;
     AdvancedMissionInput advanced;
@@ -55,6 +57,7 @@ typedef struct
     uint8_t errors_requested;
     uint8_t mission_complete;
     uint8_t point_reached;
+    uint8_t user_stop_requested;
 } AppOutput;
 
 void AppController_Init(void);

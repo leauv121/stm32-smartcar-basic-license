@@ -56,6 +56,7 @@ void Hcsr04TimIcIsr(void);
  * @return {*}
  */
 float HC_SR04Read(void);
+uint8_t HC_SR04IsDataReady(void);
 
 #endif /* HCSR04_H_ */
 

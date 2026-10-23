@@ -69,5 +69,19 @@ int main(void)
     TEST_ASSERT_TRUE(!SelfTest_IsSafeToRun());
     TEST_ASSERT_TRUE(ErrorManager_HasFatal());
 
+    ErrorManager_Init();
+    input = AllOk();
+    input.ultrasonic = DRIVER_NOT_READY;
+    SelfTest_Start(0U);
+    (void)SelfTest_Update(&input, 1U);
+    (void)SelfTest_Update(&input, 2U);
+    (void)SelfTest_Update(&input, 3U);
+    TEST_ASSERT_EQ_INT(SELF_TEST_ULTRASONIC, SelfTest_GetState());
+    (void)SelfTest_Update(&input, 1500U);
+    RunToEnd(&input);
+    TEST_ASSERT_EQ_INT(SELF_TEST_FAILED,
+                       SelfTest_GetModuleResult(SELF_TEST_MODULE_ULTRASONIC));
+    TEST_ASSERT_TRUE(SelfTest_IsSafeToRun());
+
     return test_failures;
 }

@@ -5,6 +5,9 @@
 static SelfTestState state;
 static SelfTestResult results[SELF_TEST_MODULE_COUNT];
 static uint8_t safe_to_run;
+static uint32_t state_started_ms;
+
+#define SELF_TEST_STAGE_TIMEOUT_MS 1000U
 
 static uint8_t IsEnabled(SelfTestModule module, const SelfTestInputs *inputs)
 {
@@ -54,8 +57,8 @@ static uint8_t IsFatalModule(SelfTestModule module)
 void SelfTest_Start(uint32_t now_ms)
 {
     uint8_t index;
-    (void)now_ms;
     state = SELF_TEST_ADC;
+    state_started_ms = now_ms;
     safe_to_run = 1U;
     for (index = 0U; index < (uint8_t)SELF_TEST_MODULE_COUNT; index++)
     {
@@ -79,13 +82,18 @@ SelfTestState SelfTest_Update(const SelfTestInputs *inputs, uint32_t now_ms)
     {
         results[module] = SELF_TEST_SKIPPED;
         state = (SelfTestState)((uint8_t)state + 1U);
+        state_started_ms = now_ms;
         return state;
     }
 
     status = GetStatus(module, inputs);
     if (status == DRIVER_NOT_READY)
     {
-        return state;
+        if ((uint32_t)(now_ms - state_started_ms) < SELF_TEST_STAGE_TIMEOUT_MS)
+        {
+            return state;
+        }
+        status = DRIVER_TIMEOUT;
     }
 
     if (status == DRIVER_OK)
@@ -107,6 +115,7 @@ SelfTestState SelfTest_Update(const SelfTestInputs *inputs, uint32_t now_ms)
     }
 
     state = (SelfTestState)((uint8_t)state + 1U);
+    state_started_ms = now_ms;
     return state;
 }
 

@@ -44,11 +44,27 @@ int main(void)
     TEST_ASSERT_EQ_INT(APP_RESULT_BUSY, output.command_result);
     TEST_ASSERT_EQ_INT(APP_MODE_NORMAL, output.mode);
 
-    input.command.type = APP_COMMAND_NONE;
+    input.command.type = APP_COMMAND_STOP;
     input.user_button_pressed = 1U;
     output = AppController_Update(&input, 60U);
     TEST_ASSERT_EQ_INT(APP_STATE_WAIT, output.state);
+    TEST_ASSERT_TRUE(output.user_stop_requested);
     input.user_button_pressed = 0U;
+
+    input.stop_latched = 1U;
+    input.command.type = APP_COMMAND_START;
+    output = AppController_Update(&input, 65U);
+    TEST_ASSERT_EQ_INT(APP_RESULT_ACK_REQUIRED, output.command_result);
+    TEST_ASSERT_EQ_INT(APP_STATE_WAIT, output.state);
+    input.command.type = APP_COMMAND_NONE;
+    input.user_button_pressed = 1U;
+    output = AppController_Update(&input, 65U);
+    TEST_ASSERT_EQ_INT(APP_STATE_WAIT, output.state);
+    input.user_button_pressed = 0U;
+    input.command.type = APP_COMMAND_ACK;
+    output = AppController_Update(&input, 66U);
+    TEST_ASSERT_EQ_INT(APP_RESULT_OK, output.command_result);
+    input.stop_latched = 0U;
 
     input.command.type = APP_COMMAND_SET_MODE;
     input.command.mode = APP_MODE_CIRCLE;

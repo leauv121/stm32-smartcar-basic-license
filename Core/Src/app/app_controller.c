@@ -1,5 +1,7 @@
 #include "app/app_controller.h"
 
+#include <string.h>
+
 #include "services/error_manager.h"
 
 static AppState app_state;
@@ -47,7 +49,8 @@ AppMode AppController_GetMode(void)
     return selected_mode;
 }
 
-static void ProcessCommand(const AppCommand *command, uint32_t now_ms,
+static void ProcessCommand(const AppCommand *command, uint8_t stop_latched,
+                           uint32_t now_ms,
                            AppOutput *output)
 {
     if ((command == 0) || (command->type == APP_COMMAND_NONE))
@@ -82,6 +85,10 @@ static void ProcessCommand(const AppCommand *command, uint32_t now_ms,
             {
                 output->command_result = APP_RESULT_BUSY;
             }
+            else if (stop_latched != 0U)
+            {
+                output->command_result = APP_RESULT_ACK_REQUIRED;
+            }
             else if (selected_mode == APP_MODE_NONE)
             {
                 output->command_result = APP_RESULT_MODE_REQUIRED;
@@ -98,6 +105,7 @@ static void ProcessCommand(const AppCommand *command, uint32_t now_ms,
             break;
 
         case APP_COMMAND_STOP:
+            output->user_stop_requested = (uint8_t)(app_state == APP_STATE_RUNNING);
             StopMission();
             if (app_state == APP_STATE_RUNNING)
             {
@@ -138,8 +146,11 @@ static void ProcessCommand(const AppCommand *command, uint32_t now_ms,
 
 AppOutput AppController_Update(const AppInput *input, uint32_t now_ms)
 {
-    AppOutput output = {0};
-    MissionOutput mission = {0};
+    AppOutput output;
+    MissionOutput mission;
+
+    (void)memset(&output, 0, sizeof(output));
+    (void)memset(&mission, 0, sizeof(mission));
 
     output.motion = MotionRequest_Stop();
     if (input == 0)
@@ -163,17 +174,20 @@ AppOutput AppController_Update(const AppInput *input, uint32_t now_ms)
         app_state = APP_STATE_FAULT;
     }
 
-    ProcessCommand(&input->command, now_ms, &output);
+    ProcessCommand(&input->command, input->stop_latched, now_ms, &output);
 
     /* USER 键与串口 START/STOP 共用同一任务入口，便于脱机演示。 */
-    if (input->user_button_pressed != 0U)
+    if ((input->command.type == APP_COMMAND_NONE) &&
+        (input->user_button_pressed != 0U))
     {
         if (app_state == APP_STATE_RUNNING)
         {
+            output.user_stop_requested = 1U;
             StopMission();
             app_state = APP_STATE_WAIT;
         }
         else if ((app_state == APP_STATE_WAIT) && (selected_mode != APP_MODE_NONE) &&
+                 (input->stop_latched == 0U) &&
                  (ErrorManager_HasFatal() == 0U))
         {
             StartMission(now_ms);

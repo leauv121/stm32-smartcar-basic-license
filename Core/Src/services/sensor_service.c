@@ -5,6 +5,7 @@
 #include "services/error_manager.h"
 
 #define SENSOR_YAW_TIMEOUT_MS         100U
+#define SENSOR_LINE_TIMEOUT_MS        100U
 #define SENSOR_COLOR_TIMEOUT_MS       500U
 #define SENSOR_ULTRASONIC_TIMEOUT_MS  500U
 
@@ -42,6 +43,7 @@ void SensorService_UpdateLine(uint16_t left_adc,
     sensor_snapshot.line.outer_left = outer_left;
     sensor_snapshot.line.valid = 1U;
     sensor_snapshot.line.updated_ms = now_ms;
+    ErrorManager_Clear(ERR_MODULE_LINE_SENSOR, ERROR_CODE_DATA_TIMEOUT, now_ms);
 }
 
 void SensorService_UpdateYaw(float yaw, uint32_t now_ms)
@@ -90,6 +92,20 @@ const SensorSnapshot *SensorService_GetSnapshot(void)
 
 void SensorService_CheckTimeouts(uint32_t now_ms, uint8_t mission_requires_yaw)
 {
+    if ((source_enabled[SENSOR_SOURCE_LINE] != 0U) &&
+        (((sensor_snapshot.line.valid == 0U) &&
+          (now_ms > SENSOR_LINE_TIMEOUT_MS)) ||
+         ((sensor_snapshot.line.valid != 0U) &&
+          ((uint32_t)(now_ms - sensor_snapshot.line.updated_ms) >
+           SENSOR_LINE_TIMEOUT_MS))))
+    {
+        ErrorManager_Report(ERR_MODULE_LINE_SENSOR,
+                            ERROR_CODE_DATA_TIMEOUT,
+                            ERROR_LEVEL_FATAL,
+                            now_ms,
+                            0U);
+    }
+
     if ((mission_requires_yaw != 0U) &&
         (source_enabled[SENSOR_SOURCE_YAW] != 0U) &&
         ((sensor_snapshot.yaw.valid == 0U) ||
@@ -103,8 +119,11 @@ void SensorService_CheckTimeouts(uint32_t now_ms, uint8_t mission_requires_yaw)
     }
 
     if ((source_enabled[SENSOR_SOURCE_COLOR] != 0U) &&
-        (sensor_snapshot.color.valid != 0U) &&
-        ((uint32_t)(now_ms - sensor_snapshot.color.updated_ms) > SENSOR_COLOR_TIMEOUT_MS))
+        (((sensor_snapshot.color.valid == 0U) &&
+          (now_ms > SENSOR_COLOR_TIMEOUT_MS)) ||
+         ((sensor_snapshot.color.valid != 0U) &&
+          ((uint32_t)(now_ms - sensor_snapshot.color.updated_ms) >
+           SENSOR_COLOR_TIMEOUT_MS))))
     {
         ErrorManager_Report(ERR_MODULE_COLOR,
                             ERROR_CODE_DATA_TIMEOUT,
@@ -114,9 +133,10 @@ void SensorService_CheckTimeouts(uint32_t now_ms, uint8_t mission_requires_yaw)
     }
 
     if ((source_enabled[SENSOR_SOURCE_ULTRASONIC] != 0U) &&
-        (sensor_snapshot.distance_cm.valid != 0U) &&
-        ((uint32_t)(now_ms - sensor_snapshot.distance_cm.updated_ms) >
-         SENSOR_ULTRASONIC_TIMEOUT_MS))
+        (((sensor_snapshot.distance_cm.valid == 0U) &&
+          (now_ms > SENSOR_ULTRASONIC_TIMEOUT_MS)) ||
+         ((uint32_t)(now_ms - sensor_snapshot.distance_cm.updated_ms) >
+         SENSOR_ULTRASONIC_TIMEOUT_MS)))
     {
         ErrorManager_Report(ERR_MODULE_ULTRASONIC,
                             ERROR_CODE_DATA_TIMEOUT,

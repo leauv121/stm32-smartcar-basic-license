@@ -2,6 +2,7 @@
 #include "services/driver_algorithms.h"
 
 Hcsr04InfoTypeDef Hcsr04Info;
+static volatile uint8_t hcsr04_data_ready;
 
 /**
  * @description: 超声波模块的输入捕获定时器通道初始化
@@ -72,6 +73,7 @@ void Hcsr04TimIcIsr(void) {
         Hcsr04Info.high_level_us = Hcsr04Info.t2 - Hcsr04Info.t1; //  高电平持续时间 = 下降沿时间点 - 上升沿时间点
         // 计算距离
         Hcsr04Info.distance = DriverAlgorithms_UltrasonicCm(Hcsr04Info.high_level_us);
+        hcsr04_data_ready = 1U;
         // 重新开启上升沿捕获
         Hcsr04Info.edge_state = 0;  //  一次采集完毕，清零
         __HAL_TIM_SET_CAPTUREPOLARITY(Hcsr04Info.TimerHandle, Hcsr04Info.ic_tim_ch, TIM_INPUTCHANNELPOLARITY_RISING);
@@ -88,7 +90,13 @@ float HC_SR04Read(void) {
     if (Hcsr04Info.distance >= 450) {
         Hcsr04Info.distance = 450;
     }
+    hcsr04_data_ready = 0U;
     return Hcsr04Info.distance;
+}
+
+uint8_t HC_SR04IsDataReady(void)
+{
+    return hcsr04_data_ready;
 }
 
 

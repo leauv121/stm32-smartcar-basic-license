@@ -30,10 +30,12 @@
 #include "oled_driver.h"
 #include "mpu6050.h"
 #include "mpu6050_dmp.h"
+#include "app/app_runtime.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+#if 0
 typedef enum
 {
   ADC_ERROR_NONE = 0,
@@ -408,6 +410,12 @@ static void UART_Report_Tracking_Mission(void)
          tracking_progress);
 }
 /* USER CODE END 0 */
+#endif
+
+/* 新框架保留给中断和 key.c 使用的兼容符号。 */
+volatile uint8_t control_tick_20ms = 0U;
+uint8_t key_rval = 0U;
+void SystemClock_Config(void);
 
 /**
   * @brief  The application entry point.
@@ -416,7 +424,9 @@ static void UART_Report_Tracking_Mission(void)
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+#if 0
   uint8_t key_value;
+#endif
   /* USER CODE END 1 */
 
   HAL_Init();
@@ -426,11 +436,16 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
   MX_USART3_UART_Init();
+  MX_TIM4_Init();
+  MX_TIM1_Init();
   MX_I2C1_Init();
   MX_ADC1_Init();
 
   /* USER CODE BEGIN 2 */
+  AppRuntime_Init();
+#if 0
   TB6612_Init();
   Smart_Car_Stop();
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
@@ -553,12 +568,15 @@ int main(void)
   last_display_ms = last_mpu_poll_ms;
   last_uart_ms = last_mpu_poll_ms;
   OLED_Update_Tracking_Mission();
+#endif
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+    AppRuntime_RunOnce();
+#if 0
     uint8_t control_tick_due = 0U;
     uint32_t now_ms = HAL_GetTick();
 
@@ -618,6 +636,7 @@ int main(void)
       last_uart_ms = now_ms;
       UART_Report_Tracking_Mission();
     }
+#endif
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -669,9 +688,9 @@ void SystemClock_Config(void)
 /* USER CODE BEGIN 4 */
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-  if ((GPIO_Pin == MEMS_INT_Pin) && (init_flag == 1U))
+  if (GPIO_Pin == MEMS_INT_Pin)
   {
-    mems_data_rdy_flag = 1U;
+    AppRuntime_OnMpuReady();
   }
 }
 
@@ -680,8 +699,28 @@ void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *hadc)
 {
   if (hadc->Instance == ADC1)
   {
-    adc_error_state = ADC_ERROR_RUNTIME;
+    AppRuntime_OnAdcError();
   }
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+  AppRuntime_OnTimerPeriod(htim);
+}
+
+void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim)
+{
+  AppRuntime_OnTimerCapture(htim);
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+  AppRuntime_OnUartReceive(huart);
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  AppRuntime_OnUartError(huart);
 }
 /* USER CODE END 4 */
 

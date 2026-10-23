@@ -5,12 +5,16 @@
 #include "oled_driver.h"
 #include "speed_measure.h"
 #include "tcs3472.h"
-#include "MPU6050_DMP/MPU6050_DMP/mpu6050_dmp.h"
+#include "mpu6050_dmp.h"
 
 static HardwareHealth health;
 
 void HardwareAdapter_Init(void)
 {
+    /* 先点亮显示，再进行耗时的 MPU DMP 静止校准。 */
+    OLED_Init();
+    health.display = DRIVER_OK;
+
     /* ADC DMA 的正式启动由 main.c 统一完成，这里只登记启动后的健康状态。 */
     health.adc = DRIVER_OK;
 
@@ -32,8 +36,6 @@ void HardwareAdapter_Init(void)
     /* 无返回值的旧驱动先登记为可用，运行时超时检测负责继续验证。 */
     health.ultrasonic = DRIVER_NOT_READY;
     health.battery = DRIVER_NOT_READY;
-    OLED_Init();
-    health.display = DRIVER_OK;
 }
 
 HardwareHealth HardwareAdapter_GetHealth(void)

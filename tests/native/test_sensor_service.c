@@ -25,6 +25,7 @@ static void test_required_stale_yaw_reports_fatal_error(void)
 
     ErrorManager_Init();
     SensorService_Init();
+    SensorService_SetSourceEnabled(SENSOR_SOURCE_LINE, 0U);
     SensorService_UpdateYaw(0.0f, 10U);
     SensorService_CheckTimeouts(200U, 1U);
 
@@ -40,9 +41,44 @@ static void test_disabled_optional_sources_do_not_report_errors(void)
     SensorService_Init();
     SensorService_SetSourceEnabled(SENSOR_SOURCE_COLOR, 0U);
     SensorService_SetSourceEnabled(SENSOR_SOURCE_ULTRASONIC, 0U);
+    SensorService_SetSourceEnabled(SENSOR_SOURCE_LINE, 0U);
     SensorService_CheckTimeouts(5000U, 0U);
 
     TEST_ASSERT_EQ_INT(0, ErrorManager_GetActiveCount());
+}
+
+static void test_enabled_ultrasonic_without_echo_reports_timeout(void)
+{
+    const ErrorRecord *record;
+
+    ErrorManager_Init();
+    SensorService_Init();
+    SensorService_SetSourceEnabled(SENSOR_SOURCE_COLOR, 0U);
+    SensorService_SetSourceEnabled(SENSOR_SOURCE_LINE, 0U);
+    SensorService_CheckTimeouts(100U, 0U);
+    TEST_ASSERT_EQ_INT(0, ErrorManager_GetActiveCount());
+    SensorService_CheckTimeouts(600U, 0U);
+
+    record = ErrorManager_GetHighest();
+    TEST_ASSERT_TRUE(record != 0);
+    TEST_ASSERT_EQ_INT(ERR_MODULE_ULTRASONIC, record->module);
+    TEST_ASSERT_EQ_INT(ERROR_CODE_DATA_TIMEOUT, record->code);
+}
+
+static void test_required_line_and_enabled_color_without_data_report_timeout(void)
+{
+    const ErrorRecord *record;
+
+    ErrorManager_Init();
+    SensorService_Init();
+    SensorService_SetSourceEnabled(SENSOR_SOURCE_ULTRASONIC, 0U);
+    SensorService_CheckTimeouts(600U, 0U);
+
+    TEST_ASSERT_EQ_INT(2, ErrorManager_GetActiveCount());
+    record = ErrorManager_GetHighest();
+    TEST_ASSERT_TRUE(record != 0);
+    TEST_ASSERT_EQ_INT(ERR_MODULE_LINE_SENSOR, record->module);
+    TEST_ASSERT_EQ_INT(ERROR_LEVEL_FATAL, record->level);
 }
 
 int main(void)
@@ -50,5 +86,7 @@ int main(void)
     test_updates_produce_valid_timestamped_snapshot();
     test_required_stale_yaw_reports_fatal_error();
     test_disabled_optional_sources_do_not_report_errors();
+    test_enabled_ultrasonic_without_echo_reports_timeout();
+    test_required_line_and_enabled_color_without_data_report_timeout();
     return test_failures;
 }
