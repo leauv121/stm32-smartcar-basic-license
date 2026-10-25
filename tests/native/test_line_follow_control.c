@@ -231,6 +231,30 @@ static void test_stable_center_accelerates_and_sustained_deviation_slows(void)
                        ((int32_t)output.left_target + output.right_target) / 2);
 }
 
+static void test_curve_guidance_keeps_higher_base_speed(void)
+{
+    LineFollowOutput output;
+    LineFollowInput centered = {2800U, 2800U, 0U, 0U, 1U};
+    LineFollowInput curve = {1800U, 2600U, 1U, 0U, 1U};
+    int32_t average;
+    uint8_t index;
+
+    LineFollowControl_Reset();
+    for (index = 0U; index < 60U; index++)
+    {
+        output = LineFollowControl_Update(centered);
+    }
+    for (index = 0U; index < 8U; index++)
+    {
+        output = LineFollowControl_Update(curve);
+    }
+
+    average = ((int32_t)output.left_target + output.right_target) / 2;
+    TEST_ASSERT_EQ_INT(4200, average);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
+    TEST_ASSERT_TRUE(output.right_target >= CAR_LINE_CURVE_MIN_WHEEL_SPEED);
+}
+
 static void test_sustained_large_deviation_uses_strong_correction(void)
 {
     LineFollowOutput output;
@@ -419,6 +443,7 @@ int main(void)
     test_outer_hint_is_kept_as_lost_line_search_direction();
     test_left_and_right_outer_hints_produce_mirrored_outputs();
     test_stable_center_accelerates_and_sustained_deviation_slows();
+    test_curve_guidance_keeps_higher_base_speed();
     test_sustained_large_deviation_uses_strong_correction();
     test_complete_line_loss_enters_slow_search_in_last_error_direction();
     test_lost_line_noise_does_not_reverse_last_valid_search_direction();

@@ -462,7 +462,15 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     }
     last_error = error;
 
-    if (centered_sample_count >= CAR_LINE_CENTER_FAST_SAMPLES)
+    if ((complete_line_loss == 0U) &&
+        ((curve_candidate_count != 0U) ||
+         (curve_outer_direction_latched != 0U) ||
+         (curve_active != 0U)))
+    {
+        /* 弯道只降低到专用速度，不再套用普通偏离的低速档。 */
+        base_speed = approach_speed(base_speed, CAR_LINE_CURVE_SPEED);
+    }
+    else if (centered_sample_count >= CAR_LINE_CENTER_FAST_SAMPLES)
     {
         base_speed = approach_speed(base_speed, CAR_LINE_CENTER_FAST_SPEED);
     }

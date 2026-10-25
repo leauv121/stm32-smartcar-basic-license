@@ -44,7 +44,7 @@
 #define CAR_LINE_CURVE_ERROR_MIN            700
 #define CAR_LINE_CURVE_PID_GAIN_NUM           3
 #define CAR_LINE_CURVE_PID_GAIN_DEN           2
-#define CAR_LINE_CURVE_SPEED              3800
+#define CAR_LINE_CURVE_SPEED              4200
 #define CAR_LINE_CURVE_OUTPUT_LIMIT       2800
 #define CAR_LINE_CURVE_MIN_WHEEL_SPEED    1000
 
