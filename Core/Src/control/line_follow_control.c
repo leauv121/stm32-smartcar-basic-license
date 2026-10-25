@@ -18,6 +18,7 @@ static uint8_t outer_left_count;
 static uint8_t curve_candidate_count;
 static uint8_t curve_release_count;
 static uint8_t curve_active;
+static uint8_t curve_outer_direction_latched;
 static int32_t curve_direction;
 static LineFollowMode last_search_direction;
 static LineFollowOutput last_output;
@@ -84,30 +85,29 @@ static void reset_tracking_confidence(void)
     curve_candidate_count = 0U;
     curve_release_count = 0U;
     curve_active = 0U;
+    curve_outer_direction_latched = 0U;
     curve_direction = 0;
 }
 
 static void increment_u8(uint8_t *value, uint8_t maximum);
 
-static int32_t curve_candidate_direction(uint8_t outer_right,
-                                          uint8_t outer_left,
-                                          int32_t error)
+static int32_t outer_hint_direction(LineFollowInput input)
 {
-    int32_t magnitude = (error < 0) ? -error : error;
-
-    if (magnitude < CAR_LINE_CURVE_ERROR_MIN)
-    {
-        return 0;
-    }
-    /* 外侧传感器方向优先，保持与历史可用版本一致。 */
-    if ((outer_right != 0U) && (outer_left == 0U))
+    if ((input.outer_right != 0U) && (input.outer_left == 0U))
     {
         return 1;
     }
-    if ((outer_left != 0U) && (outer_right == 0U))
+    if ((input.outer_left != 0U) && (input.outer_right == 0U))
     {
         return -1;
     }
+    return 0;
+}
+
+static int32_t curve_adc_direction(int32_t error)
+{
+    int32_t magnitude = (error < 0) ? -error : error;
+
     /* 没有外侧提示时，只有更大的持续误差才视为弯道。 */
     return (magnitude >= (CAR_LINE_CURVE_ERROR_MIN * 2)) ?
            ((error > 0) ? 1 : -1) : 0;
@@ -117,8 +117,8 @@ static void update_curve_state(LineFollowInput input,
                                int32_t error,
                                uint8_t complete_line_loss)
 {
-    int32_t candidate_direction = (complete_line_loss == 0U) ?
-        curve_candidate_direction(input.outer_right, input.outer_left, error) : 0;
+    int32_t candidate_direction;
+    int32_t outer_direction = outer_hint_direction(input);
 
     if (curve_active != 0U)
     {
@@ -130,6 +130,8 @@ static void update_curve_state(LineFollowInput input,
                 curve_active = 0U;
                 curve_release_count = 0U;
                 curve_candidate_count = 0U;
+                curve_outer_direction_latched = 0U;
+                curve_direction = 0;
             }
         }
         else
@@ -140,6 +142,32 @@ static void update_curve_state(LineFollowInput input,
     }
 
     curve_release_count = 0U;
+    if (complete_line_loss != 0U)
+    {
+        curve_candidate_count = 0U;
+        return;
+    }
+    if (curve_outer_direction_latched != 0U)
+    {
+        if (line_is_centered(input) != 0U)
+        {
+            curve_candidate_count = 0U;
+            curve_outer_direction_latched = 0U;
+            curve_direction = 0;
+            return;
+        }
+        candidate_direction = curve_direction;
+    }
+    else if (outer_direction != 0)
+    {
+        curve_outer_direction_latched = 1U;
+        candidate_direction = outer_direction;
+    }
+    else
+    {
+        candidate_direction = curve_adc_direction(error);
+    }
+
     if (candidate_direction == 0)
     {
         curve_candidate_count = 0U;
@@ -339,6 +367,12 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     }
 
     update_curve_state(input, error, complete_line_loss);
+    if ((curve_outer_direction_latched != 0U) || (curve_active != 0U))
+    {
+        last_search_direction = (curve_direction > 0) ?
+                                LINE_FOLLOW_RESCUE_RIGHT :
+                                LINE_FOLLOW_RESCUE_LEFT;
+    }
 
     if (line_is_centered(input) != 0U)
     {

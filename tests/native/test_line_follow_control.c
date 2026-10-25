@@ -63,6 +63,55 @@ static void test_outer_hint_keeps_curve_direction_when_adc_sign_conflicts(void)
     TEST_ASSERT_TRUE(output.left_target > output.right_target);
 }
 
+static void test_outer_hint_direction_stays_latched_after_short_pulse(void)
+{
+    LineFollowOutput output;
+    LineFollowInput input = {2600U, 1200U, 1U, 0U, 1U};
+
+    LineFollowControl_Reset();
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+
+    input.outer_right = 0U;
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
+}
+
+static void test_outer_hint_direction_does_not_require_large_adc_error(void)
+{
+    LineFollowOutput output;
+    LineFollowInput input = {2300U, 2000U, 1U, 0U, 1U};
+
+    LineFollowControl_Reset();
+    output = LineFollowControl_Update(input);
+
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
+}
+
+static void test_outer_hint_is_kept_as_lost_line_search_direction(void)
+{
+    LineFollowOutput output;
+    LineFollowInput input = {2600U, 1200U, 1U, 0U, 1U};
+    uint8_t index;
+
+    LineFollowControl_Reset();
+    (void)LineFollowControl_Update(input);
+    input.left_adc = 200U;
+    input.right_adc = 200U;
+    input.outer_right = 0U;
+    for (index = 0U; index < CAR_LINE_LOST_SEARCH_SAMPLES; index++)
+    {
+        output = LineFollowControl_Update(input);
+    }
+
+    TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
+}
+
 static void test_left_and_right_outer_hints_produce_mirrored_outputs(void)
 {
     LineFollowOutput right_output;
@@ -302,6 +351,9 @@ int main(void)
     test_outer_sensor_alone_does_not_trigger_fixed_rescue();
     test_consistent_curve_error_enters_strong_pid();
     test_outer_hint_keeps_curve_direction_when_adc_sign_conflicts();
+    test_outer_hint_direction_stays_latched_after_short_pulse();
+    test_outer_hint_direction_does_not_require_large_adc_error();
+    test_outer_hint_is_kept_as_lost_line_search_direction();
     test_left_and_right_outer_hints_produce_mirrored_outputs();
     test_stable_center_accelerates_and_sustained_deviation_slows();
     test_sustained_large_deviation_uses_strong_correction();
