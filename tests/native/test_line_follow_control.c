@@ -162,11 +162,15 @@ static void test_returning_from_rescue_resynchronizes_pid_history(void)
     /* 外侧刚释放但中间尚未稳定时，不能立即退出救线。 */
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
 
+    /* 连续六个新样本确认中间重新捕获黑线后，才同步历史并返回 PID。 */
+    for (uint8_t index = 1U; index < (CAR_LINE_RESCUE_CENTER_CONFIRM_SAMPLES - 1U); index++)
+    {
+        output = LineFollowControl_Update(input);
+        TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
+    }
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
     output = LineFollowControl_Update(input);
-
-    /* 连续三个新样本确认中间重新捕获黑线后，才同步历史并返回 PID。 */
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
     TEST_ASSERT_EQ_INT(400, output.pid_output);
 }
@@ -191,10 +195,17 @@ static void test_forced_reacquire_holds_slow_turn_until_center_is_stable(void)
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
 
     input.sample_ready = 1U;
+    for (uint8_t index = 0U; index < (CAR_LINE_RESCUE_CENTER_CONFIRM_SAMPLES - 1U); index++)
+    {
+        output = LineFollowControl_Update(input);
+        TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
+        TEST_ASSERT_EQ_INT(2400, output.left_target);
+        TEST_ASSERT_EQ_INT(700, output.right_target);
+    }
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
-    output = LineFollowControl_Update(input);
-    TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
+    TEST_ASSERT_EQ_INT(2400, output.left_target);
+    TEST_ASSERT_EQ_INT(700, output.right_target);
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
     TEST_ASSERT_TRUE(output.left_target < 2500);

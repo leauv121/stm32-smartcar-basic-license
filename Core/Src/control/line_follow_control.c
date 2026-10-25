@@ -148,6 +148,7 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     int32_t raw_derivative;
     LineFollowMode previous_mode;
     uint8_t complete_line_loss;
+    uint8_t center_was_confirmed;
 
     if (input.sample_ready == 0U)
     {
@@ -155,6 +156,7 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     }
 
     previous_mode = current_mode;
+    center_was_confirmed = 0U;
 
     if (current_mode != LINE_FOLLOW_PID)
     {
@@ -186,9 +188,14 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         {
             outer_right_count = 0U;
             outer_left_count = 0U;
-            if (recenter_count < CAR_LINE_RECENTER_CONFIRM_SAMPLES)
+            if (recenter_count < CAR_LINE_RESCUE_CENTER_CONFIRM_SAMPLES)
             {
                 recenter_count++;
+            }
+            else
+            {
+                /* 第六个有效样本已经保持完成，第七个样本才允许退出。 */
+                center_was_confirmed = 1U;
             }
         }
         else
@@ -198,7 +205,8 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
             recenter_count = 0U;
         }
 
-        if (recenter_count < CAR_LINE_RECENTER_CONFIRM_SAMPLES)
+        /* 回中后继续保持同方向纠偏一段时间，补足实际弯道角度。 */
+        if (center_was_confirmed == 0U)
         {
             /* 持续低速找线，不因位于赛道边缘或找线时间较长而主动停车。 */
             last_output = recovery_output(current_mode);
