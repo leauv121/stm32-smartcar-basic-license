@@ -10,7 +10,6 @@ static uint8_t primed;
 static LineFollowMode current_mode;
 static uint8_t forced_recovery;
 static uint8_t recenter_count;
-static uint16_t recovery_sample_count;
 static uint8_t centered_sample_count;
 static uint8_t deviation_sample_count;
 static uint8_t lost_sample_count;
@@ -110,7 +109,6 @@ void LineFollowControl_Reset(void)
     current_mode = LINE_FOLLOW_PID;
     forced_recovery = 0U;
     recenter_count = 0U;
-    recovery_sample_count = 0U;
     last_search_direction = LINE_FOLLOW_RESCUE_RIGHT;
     reset_tracking_confidence();
     last_output = (LineFollowOutput){0, 0, 0, LINE_FOLLOW_PID};
@@ -126,7 +124,6 @@ void LineFollowControl_Prime(uint16_t left_adc, uint16_t right_adc)
     current_mode = LINE_FOLLOW_PID;
     forced_recovery = 0U;
     recenter_count = 0U;
-    recovery_sample_count = 0U;
     reset_tracking_confidence();
 }
 
@@ -140,7 +137,6 @@ void LineFollowControl_StartRecovery(LineFollowMode direction)
     current_mode = direction;
     forced_recovery = 1U;
     recenter_count = 0U;
-    recovery_sample_count = 0U;
     reset_tracking_confidence();
     last_output = recovery_output(direction);
 }
@@ -204,16 +200,7 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
 
         if (recenter_count < CAR_LINE_RECENTER_CONFIRM_SAMPLES)
         {
-            if (recovery_sample_count < CAR_LINE_RECOVERY_MAX_SAMPLES)
-            {
-                recovery_sample_count++;
-            }
-            if (recovery_sample_count >= CAR_LINE_RECOVERY_MAX_SAMPLES)
-            {
-                current_mode = LINE_FOLLOW_FAULT;
-                last_output = (LineFollowOutput){0, 0, 0, LINE_FOLLOW_FAULT};
-                return last_output;
-            }
+            /* 持续低速找线，不因位于赛道边缘或找线时间较长而主动停车。 */
             last_output = recovery_output(current_mode);
             return last_output;
         }
@@ -222,7 +209,6 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         current_mode = LINE_FOLLOW_PID;
         forced_recovery = 0U;
         recenter_count = 0U;
-        recovery_sample_count = 0U;
         reset_tracking_confidence();
         last_error = line_error(input.left_adc, input.right_adc);
         integral = 0;
@@ -252,7 +238,6 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         current_mode = LINE_FOLLOW_RESCUE_RIGHT;
         forced_recovery = 0U;
         recenter_count = 0U;
-        recovery_sample_count = 1U;
         last_search_direction = current_mode;
         last_output = recovery_output(current_mode);
         return last_output;
@@ -262,7 +247,6 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         current_mode = LINE_FOLLOW_RESCUE_LEFT;
         forced_recovery = 0U;
         recenter_count = 0U;
-        recovery_sample_count = 1U;
         last_search_direction = current_mode;
         last_output = recovery_output(current_mode);
         return last_output;
@@ -324,7 +308,6 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         current_mode = last_search_direction;
         forced_recovery = 1U;
         recenter_count = 0U;
-        recovery_sample_count = 0U;
         last_output = recovery_output(current_mode);
         return last_output;
     }

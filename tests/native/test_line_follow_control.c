@@ -24,8 +24,8 @@ static void test_outer_sensors_request_rescue_turns(void)
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
-    TEST_ASSERT_EQ_INT(3600, output.left_target);
-    TEST_ASSERT_EQ_INT(1400, output.right_target);
+    TEST_ASSERT_EQ_INT(4200, output.left_target);
+    TEST_ASSERT_EQ_INT(800, output.right_target);
 
     input.outer_right = 0U;
     input.outer_left = 1U;
@@ -33,15 +33,15 @@ static void test_outer_sensors_request_rescue_turns(void)
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_LEFT, output.mode);
-    TEST_ASSERT_EQ_INT(1400, output.left_target);
-    TEST_ASSERT_EQ_INT(3600, output.right_target);
+    TEST_ASSERT_EQ_INT(800, output.left_target);
+    TEST_ASSERT_EQ_INT(4200, output.right_target);
 }
 
 static void test_stable_center_accelerates_and_sustained_deviation_slows(void)
 {
     LineFollowOutput output;
     LineFollowInput centered = {2800U, 2800U, 0U, 0U, 1U};
-    LineFollowInput left_lost = {200U, 3000U, 0U, 0U, 1U};
+    LineFollowInput deviated = {2000U, 2600U, 0U, 0U, 1U};
     int32_t fast_average;
     int32_t slow_average;
     uint8_t index;
@@ -52,34 +52,48 @@ static void test_stable_center_accelerates_and_sustained_deviation_slows(void)
         output = LineFollowControl_Update(centered);
     }
     fast_average = ((int32_t)output.left_target + output.right_target) / 2;
-    TEST_ASSERT_EQ_INT(CAR_LINE_CENTER_FAST_SPEED, fast_average);
+    TEST_ASSERT_EQ_INT(5000, fast_average);
 
-    output = LineFollowControl_Update(left_lost);
-    TEST_ASSERT_EQ_INT(CAR_LINE_CENTER_FAST_SPEED - CAR_LINE_SPEED_DECEL_STEP,
+    output = LineFollowControl_Update(deviated);
+    TEST_ASSERT_EQ_INT(4750,
                        ((int32_t)output.left_target + output.right_target) / 2);
-    left_lost.sample_ready = 0U;
+    deviated.sample_ready = 0U;
     {
-        LineFollowOutput stale = LineFollowControl_Update(left_lost);
+        LineFollowOutput stale = LineFollowControl_Update(deviated);
         TEST_ASSERT_EQ_INT(output.left_target, stale.left_target);
         TEST_ASSERT_EQ_INT(output.right_target, stale.right_target);
     }
-    left_lost.sample_ready = 1U;
-    output = LineFollowControl_Update(left_lost);
-    output = LineFollowControl_Update(left_lost);
+    deviated.sample_ready = 1U;
+    output = LineFollowControl_Update(deviated);
+    output = LineFollowControl_Update(deviated);
     slow_average = ((int32_t)output.left_target + output.right_target) / 2;
     TEST_ASSERT_TRUE(slow_average < fast_average);
-    TEST_ASSERT_TRUE(output.pid_output <= CAR_LINE_CAUTION_OUTPUT_LIMIT);
+    TEST_ASSERT_TRUE(output.pid_output <= 2400);
 
-    output = LineFollowControl_Update(left_lost);
-    output = LineFollowControl_Update(left_lost);
-    output = LineFollowControl_Update(left_lost);
-    TEST_ASSERT_EQ_INT(CAR_LINE_CAUTION_SPEED,
+    while (slow_average > 3300)
+    {
+        output = LineFollowControl_Update(deviated);
+        slow_average = ((int32_t)output.left_target + output.right_target) / 2;
+    }
+    TEST_ASSERT_EQ_INT(3300,
                        ((int32_t)output.left_target + output.right_target) / 2);
+}
 
-    left_lost.left_adc = 3000U;
-    left_lost.right_adc = 200U;
-    output = LineFollowControl_Update(left_lost);
-    TEST_ASSERT_TRUE(output.pid_output >= -CAR_LINE_CAUTION_OUTPUT_LIMIT);
+static void test_sustained_large_deviation_uses_strong_correction(void)
+{
+    LineFollowOutput output;
+    LineFollowInput deviated = {200U, 3000U, 0U, 0U, 1U};
+
+    LineFollowControl_Reset();
+    output = LineFollowControl_Update(deviated);
+    output = LineFollowControl_Update(deviated);
+    output = LineFollowControl_Update(deviated);
+    TEST_ASSERT_EQ_INT(2400, output.pid_output);
+
+    deviated.left_adc = 3000U;
+    deviated.right_adc = 200U;
+    output = LineFollowControl_Update(deviated);
+    TEST_ASSERT_EQ_INT(-2400, output.pid_output);
 }
 
 static void test_complete_line_loss_enters_slow_search_in_last_error_direction(void)
@@ -194,11 +208,12 @@ static void test_pid_output_is_clamped_to_safe_range(void)
 
     LineFollowControl_Reset();
     output = LineFollowControl_Update(input);
+    TEST_ASSERT_EQ_INT(2600, output.pid_output);
     TEST_ASSERT_TRUE(output.left_target <= 6500);
     TEST_ASSERT_TRUE(output.right_target >= 0);
 }
 
-static void test_recovery_timeout_stops_instead_of_turning_forever(void)
+static void test_recovery_keeps_searching_until_line_is_found(void)
 {
     LineFollowOutput output;
     LineFollowInput input = {200U, 300U, 0U, 0U, 0U};
@@ -215,13 +230,13 @@ static void test_recovery_timeout_stops_instead_of_turning_forever(void)
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
 
     input.sample_ready = 1U;
-    for (index = 0U; index < CAR_LINE_RECOVERY_MAX_SAMPLES; index++)
+    for (index = 0U; index < 400U; index++)
     {
         output = LineFollowControl_Update(input);
     }
-    TEST_ASSERT_EQ_INT(LINE_FOLLOW_FAULT, output.mode);
-    TEST_ASSERT_EQ_INT(0, output.left_target);
-    TEST_ASSERT_EQ_INT(0, output.right_target);
+    TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
+    TEST_ASSERT_EQ_INT(2400, output.left_target);
+    TEST_ASSERT_EQ_INT(700, output.right_target);
 }
 
 int main(void)
@@ -229,12 +244,13 @@ int main(void)
     test_centered_line_drives_both_wheels_equally();
     test_outer_sensors_request_rescue_turns();
     test_stable_center_accelerates_and_sustained_deviation_slows();
+    test_sustained_large_deviation_uses_strong_correction();
     test_complete_line_loss_enters_slow_search_in_last_error_direction();
     test_lost_line_noise_does_not_reverse_last_valid_search_direction();
     test_pid_derivative_uses_low_pass_filter();
     test_returning_from_rescue_resynchronizes_pid_history();
     test_forced_reacquire_holds_slow_turn_until_center_is_stable();
     test_pid_output_is_clamped_to_safe_range();
-    test_recovery_timeout_stops_instead_of_turning_forever();
+    test_recovery_keeps_searching_until_line_is_found();
     return test_failures;
 }
