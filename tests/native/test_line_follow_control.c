@@ -42,12 +42,21 @@ static void test_consistent_curve_error_enters_strong_pid(void)
     TEST_ASSERT_TRUE(output.pid_output > 2000);
     TEST_ASSERT_TRUE(output.left_target > output.right_target);
 
-    input.left_adc = 2600U;
-    input.right_adc = 1200U;
-    input.outer_right = 0U;
-    input.outer_left = 1U;
+}
+
+static void test_outer_hint_keeps_curve_direction_when_adc_sign_conflicts(void)
+{
+    LineFollowOutput output;
+    LineFollowInput input = {2600U, 1200U, 1U, 0U, 1U};
+
+    LineFollowControl_Reset();
+    (void)LineFollowControl_Update(input);
+    (void)LineFollowControl_Update(input);
     output = LineFollowControl_Update(input);
-    TEST_ASSERT_TRUE(output.pid_output < -2000);
+
+    /* 历史版本外右触发始终右转，不能被瞬时相反 ADC 误差带偏。 */
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
 }
 
 static void test_stable_center_accelerates_and_sustained_deviation_slows(void)
@@ -103,8 +112,11 @@ static void test_sustained_large_deviation_uses_strong_correction(void)
     output = LineFollowControl_Update(deviated);
     TEST_ASSERT_EQ_INT(2800, output.pid_output);
 
+    LineFollowControl_Reset();
     deviated.left_adc = 3000U;
     deviated.right_adc = 200U;
+    output = LineFollowControl_Update(deviated);
+    output = LineFollowControl_Update(deviated);
     output = LineFollowControl_Update(deviated);
     TEST_ASSERT_EQ_INT(-2800, output.pid_output);
 }
@@ -268,6 +280,7 @@ int main(void)
     test_centered_line_drives_both_wheels_equally();
     test_outer_sensor_alone_does_not_trigger_fixed_rescue();
     test_consistent_curve_error_enters_strong_pid();
+    test_outer_hint_keeps_curve_direction_when_adc_sign_conflicts();
     test_stable_center_accelerates_and_sustained_deviation_slows();
     test_sustained_large_deviation_uses_strong_correction();
     test_complete_line_loss_enters_slow_search_in_last_error_direction();

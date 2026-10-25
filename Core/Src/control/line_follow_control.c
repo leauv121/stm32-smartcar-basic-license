@@ -89,39 +89,36 @@ static void reset_tracking_confidence(void)
 
 static void increment_u8(uint8_t *value, uint8_t maximum);
 
-static uint8_t curve_candidate(uint16_t left_adc,
-                               uint16_t right_adc,
-                               uint8_t outer_right,
-                               uint8_t outer_left,
-                               int32_t error)
+static int32_t curve_candidate_direction(uint8_t outer_right,
+                                          uint8_t outer_left,
+                                          int32_t error)
 {
     int32_t magnitude = (error < 0) ? -error : error;
 
     if (magnitude < CAR_LINE_CURVE_ERROR_MIN)
     {
-        return 0U;
+        return 0;
     }
-    if ((error > 0) && (outer_right != 0U))
+    /* 外侧传感器方向优先，保持与历史可用版本一致。 */
+    if ((outer_right != 0U) && (outer_left == 0U))
     {
-        return 1U;
+        return 1;
     }
-    if ((error < 0) && (outer_left != 0U))
+    if ((outer_left != 0U) && (outer_right == 0U))
     {
-        return 1U;
+        return -1;
     }
     /* 没有外侧提示时，只有更大的持续误差才视为弯道。 */
-    (void)left_adc;
-    (void)right_adc;
-    return (uint8_t)(magnitude >= (CAR_LINE_CURVE_ERROR_MIN * 2));
+    return (magnitude >= (CAR_LINE_CURVE_ERROR_MIN * 2)) ?
+           ((error > 0) ? 1 : -1) : 0;
 }
 
 static void update_curve_state(LineFollowInput input,
                                int32_t error,
                                uint8_t complete_line_loss)
 {
-    uint8_t candidate = (uint8_t)((complete_line_loss == 0U) &&
-        (curve_candidate(input.left_adc, input.right_adc,
-                         input.outer_right, input.outer_left, error) != 0U));
+    int32_t candidate_direction = (complete_line_loss == 0U) ?
+        curve_candidate_direction(input.outer_right, input.outer_left, error) : 0;
 
     if (curve_active != 0U)
     {
@@ -143,15 +140,13 @@ static void update_curve_state(LineFollowInput input,
     }
 
     curve_release_count = 0U;
-    if (candidate == 0U)
+    if (candidate_direction == 0)
     {
         curve_candidate_count = 0U;
         curve_direction = 0;
         return;
     }
-    if ((curve_direction != 0) &&
-        (((curve_direction > 0) && (error < 0)) ||
-         ((curve_direction < 0) && (error > 0))))
+    if ((curve_direction != 0) && (candidate_direction != curve_direction))
     {
         curve_candidate_count = 1U;
     }
@@ -159,7 +154,7 @@ static void update_curve_state(LineFollowInput input,
     {
         increment_u8(&curve_candidate_count, CAR_LINE_CURVE_CONFIRM_SAMPLES);
     }
-    curve_direction = (error > 0) ? 1 : -1;
+    curve_direction = candidate_direction;
     if (curve_candidate_count >= CAR_LINE_CURVE_CONFIRM_SAMPLES)
     {
         curve_active = 1U;
@@ -385,6 +380,9 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
                                   CAR_LINE_PID_KD * (float)filtered_derivative);
     if (curve_active != 0U)
     {
+        int32_t magnitude = (output.pid_output < 0) ?
+                            -output.pid_output : output.pid_output;
+        output.pid_output = (curve_direction < 0) ? -magnitude : magnitude;
         output.pid_output = (output.pid_output * CAR_LINE_CURVE_PID_GAIN_NUM) /
                             CAR_LINE_CURVE_PID_GAIN_DEN;
         output.pid_output = clamp_value(output.pid_output,
