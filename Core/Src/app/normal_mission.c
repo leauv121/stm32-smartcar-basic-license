@@ -27,8 +27,15 @@ static MissionOutput output_for_state(void)
     else if (state == NORMAL_AVOID_TURN)
     {
         output.motion.mode = MOTION_DRIVE;
-        output.motion.left_target = 4500;
-        output.motion.right_target = 0;
+        output.motion.left_target = CAR_AVOID_TURN_LEFT_SPEED;
+        output.motion.right_target = CAR_AVOID_TURN_RIGHT_SPEED;
+        output.indicator = INDICATOR_TURN_RIGHT;
+    }
+    else if (state == NORMAL_REACQUIRE_LINE)
+    {
+        output.motion.mode = MOTION_DRIVE;
+        output.motion.left_target = CAR_LINE_REACQUIRE_OUTER_SPEED;
+        output.motion.right_target = CAR_LINE_REACQUIRE_INNER_SPEED;
         output.indicator = INDICATOR_TURN_RIGHT;
     }
     if (state == NORMAL_COMPLETE) output.complete = 1U;
@@ -66,6 +73,11 @@ MissionOutput NormalMission_Update(const NormalMissionInput *input, uint32_t now
     else if ((state == NORMAL_TRACK_OUT) && (input->obstacle_detected != 0U)) state = NORMAL_OBSTACLE_HOLD;
     else if ((state == NORMAL_OBSTACLE_HOLD) && (input->hazard_hold_done != 0U)) state = NORMAL_AVOID_TURN;
     else if ((state == NORMAL_AVOID_TURN) && (input->turn_complete != 0U))
+    {
+        state = NORMAL_REACQUIRE_LINE;
+        reset_return_detection();
+    }
+    else if ((state == NORMAL_REACQUIRE_LINE) && (input->line_reacquired != 0U))
     {
         state = NORMAL_RETURN_CLEAR;
         reset_return_detection();

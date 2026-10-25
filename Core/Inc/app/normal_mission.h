@@ -12,6 +12,7 @@ typedef enum
     NORMAL_RED_WAIT,
     NORMAL_OBSTACLE_HOLD,
     NORMAL_AVOID_TURN,
+    NORMAL_REACQUIRE_LINE,
     NORMAL_RETURN_CLEAR,
     NORMAL_RETURN,
     NORMAL_COMPLETE,
@@ -28,6 +29,7 @@ typedef struct
     uint8_t obstacle_sample_ready;
     uint8_t hazard_hold_done;
     uint8_t turn_complete;
+    uint8_t line_reacquired;
     uint8_t fatal_error;
 } NormalMissionInput;
 

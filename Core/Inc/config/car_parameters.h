@@ -24,11 +24,19 @@
 /* 外侧数字传感器触发急弯救线时，保持双轮前进以减少模式切换顿挫。 */
 #define CAR_LINE_RESCUE_OUTER_SPEED        4500
 #define CAR_LINE_RESCUE_INNER_SPEED        1400
+#define CAR_LINE_REACQUIRE_OUTER_SPEED     2400
+#define CAR_LINE_REACQUIRE_INNER_SPEED      700
+#define CAR_LINE_BLACK_ADC_MIN             2000U
+#define CAR_LINE_RECENTER_ERROR_MAX         500
+#define CAR_LINE_RECENTER_CONFIRM_SAMPLES     3U
+#define CAR_LINE_RECOVERY_MAX_SAMPLES        150U
 
 /* 普通驾照障碍物掉头与返程终点检测参数。 */
 #define CAR_OBSTACLE_DETECT_DISTANCE_CM     20.0f
 #define CAR_OBSTACLE_CLEAR_DISTANCE_CM      30.0f
 #define CAR_OBSTACLE_CONFIRM_SAMPLES         3U
-#define CAR_AVOID_TURN_TARGET_DEG           180.0f
+#define CAR_AVOID_TURN_TARGET_DEG           190.0f
+#define CAR_AVOID_TURN_LEFT_SPEED           3200
+#define CAR_AVOID_TURN_RIGHT_SPEED         -3200
 
 #endif

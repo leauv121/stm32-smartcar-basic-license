@@ -25,6 +25,9 @@ static void enter_return_clear(void)
     input = no_event();
     input.turn_complete = 1U;
     (void)NormalMission_Update(&input, 1500U);
+    input = no_event();
+    input.line_reacquired = 1U;
+    (void)NormalMission_Update(&input, 1600U);
 }
 
 static void test_stop_and_restart_clear_partial_return_confirmation(void)
@@ -83,12 +86,22 @@ int main(void)
 
     input = no_event();
     input.hazard_hold_done = 1U;
-    NormalMission_Update(&input, 4300U);
+    output = NormalMission_Update(&input, 4300U);
     TEST_ASSERT_EQ_INT(NORMAL_AVOID_TURN, NormalMission_GetState());
+    TEST_ASSERT_EQ_INT(3200, output.motion.left_target);
+    TEST_ASSERT_EQ_INT(-3200, output.motion.right_target);
 
     input = no_event();
     input.turn_complete = 1U;
-    NormalMission_Update(&input, 4500U);
+    output = NormalMission_Update(&input, 4500U);
+    TEST_ASSERT_EQ_INT(NORMAL_REACQUIRE_LINE, NormalMission_GetState());
+    TEST_ASSERT_EQ_INT(MOTION_DRIVE, output.motion.mode);
+    TEST_ASSERT_EQ_INT(2400, output.motion.left_target);
+    TEST_ASSERT_EQ_INT(700, output.motion.right_target);
+
+    input = no_event();
+    input.line_reacquired = 1U;
+    NormalMission_Update(&input, 4550U);
     TEST_ASSERT_EQ_INT(NORMAL_RETURN_CLEAR, NormalMission_GetState());
 
     /* 掉头后必须连续三次确认已离开原障碍物，才能开始等待返程终点。 */

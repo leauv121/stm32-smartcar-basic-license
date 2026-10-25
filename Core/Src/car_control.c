@@ -92,7 +92,7 @@ void Smart_Car_Stop(void)
   */
 void Line_Following_PID(uint16_t left_adc, uint16_t right_adc)
 {
-  LineFollowInput input = {left_adc, right_adc, 0U, 0U};
+  LineFollowInput input = {left_adc, right_adc, 0U, 0U, 1U};
   CarControl_ApplyLineOutput(LineFollowControl_Update(input));
 }
 
@@ -124,6 +124,7 @@ void Line_Following_Hybrid(uint16_t left_adc, uint16_t right_adc)
                                                 LINE1_Pin) == GPIO_PIN_SET);
   input.outer_left = (uint8_t)(HAL_GPIO_ReadPin(LINE4_GPIO_Port,
                                                LINE4_Pin) == GPIO_PIN_SET);
+  input.sample_ready = 1U;
   CarControl_ApplyLineOutput(LineFollowControl_Update(input));
 }
 

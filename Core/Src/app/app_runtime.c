@@ -46,6 +46,7 @@ static IndicatorOutput indicator_output;
 static ColorConfirmState color_confirm;
 static uint32_t obstacle_hold_started_ms;
 static uint8_t avoid_turn_started;
+static uint8_t line_reacquired_pending;
 static uint8_t self_test_announced;
 static float pitch;
 static float roll;
@@ -183,6 +184,7 @@ void AppRuntime_Init(void)
     SensorService_Init();
     RouteDetector_Init();
     LineFollowControl_Reset();
+    line_reacquired_pending = 0U;
     TB6612_Init();
     MotionControl_Apply(SafetyService_Resolve(MotionRequest_Stop(), 0U, 0U));
     AppController_Init();
@@ -221,7 +223,9 @@ void AppRuntime_RunOnce(void)
     const SensorSnapshot *sensor;
     MotionRequest requested;
     AppState previous_state = AppController_GetState();
+    NormalMissionState mission_state_before = NormalMission_GetState();
     uint8_t yaw_required;
+    uint8_t line_sample_updated = 0U;
     uint8_t distance_sample_updated = 0U;
 
     (void)memset(&app_input, 0, sizeof(app_input));
@@ -257,6 +261,7 @@ void AppRuntime_RunOnce(void)
                 DriverAlgorithms_LineDigitalIsBlack((uint8_t)HAL_GPIO_ReadPin(
                     LINE4_GPIO_Port, LINE4_Pin)),
                 now_ms);
+            line_sample_updated = 1U;
         }
     }
     if (events.tick_100ms != 0U)
@@ -335,6 +340,7 @@ void AppRuntime_RunOnce(void)
     app_input.normal.obstacle_cleared = (uint8_t)(sensor->distance_cm.valid &&
         (sensor->distance_cm.value > CAR_OBSTACLE_CLEAR_DISTANCE_CM));
     app_input.normal.obstacle_sample_ready = distance_sample_updated;
+    app_input.normal.line_reacquired = line_reacquired_pending;
     if ((NormalMission_GetState() == NORMAL_OBSTACLE_HOLD) &&
         (obstacle_hold_started_ms == 0U))
     {
@@ -373,16 +379,52 @@ void AppRuntime_RunOnce(void)
         LineFollowControl_Reset();
         obstacle_hold_started_ms = 0U;
         avoid_turn_started = 0U;
+        line_reacquired_pending = 0U;
     }
     requested = app_output.motion;
+    if ((NormalMission_GetState() == NORMAL_REACQUIRE_LINE) &&
+        (mission_state_before != NORMAL_REACQUIRE_LINE))
+    {
+        LineFollowControl_StartRecovery(LINE_FOLLOW_RESCUE_RIGHT);
+        line_reacquired_pending = 0U;
+    }
     if ((requested.mode == MOTION_DRIVE) && sensor->line.valid &&
-        (NormalMission_GetState() != NORMAL_AVOID_TURN))
+        (NormalMission_GetState() == NORMAL_REACQUIRE_LINE))
     {
         LineFollowInput line_input = {sensor->line.left_adc, sensor->line.right_adc,
-                                      sensor->line.outer_right, sensor->line.outer_left};
+                                      sensor->line.outer_right, sensor->line.outer_left,
+                                      line_sample_updated};
         LineFollowOutput line_output = LineFollowControl_Update(line_input);
         requested.left_target = line_output.left_target;
         requested.right_target = line_output.right_target;
+        line_reacquired_pending = (uint8_t)(line_output.mode == LINE_FOLLOW_PID);
+        if (line_output.mode == LINE_FOLLOW_FAULT)
+        {
+            ErrorManager_Report(ERR_MODULE_LINE_SENSOR,
+                                ERROR_CODE_VALUE_INVALID,
+                                ERROR_LEVEL_FATAL, now_ms, 0U);
+        }
+    }
+    else if ((requested.mode == MOTION_DRIVE) && sensor->line.valid &&
+             (NormalMission_GetState() != NORMAL_AVOID_TURN))
+    {
+        LineFollowInput line_input = {sensor->line.left_adc, sensor->line.right_adc,
+                                      sensor->line.outer_right, sensor->line.outer_left,
+                                      line_sample_updated};
+        LineFollowOutput line_output = LineFollowControl_Update(line_input);
+        requested.left_target = line_output.left_target;
+        requested.right_target = line_output.right_target;
+        line_reacquired_pending = 0U;
+        if (line_output.mode == LINE_FOLLOW_FAULT)
+        {
+            ErrorManager_Report(ERR_MODULE_LINE_SENSOR,
+                                ERROR_CODE_VALUE_INVALID,
+                                ERROR_LEVEL_FATAL, now_ms, 0U);
+        }
+    }
+    else if (NormalMission_GetState() != NORMAL_REACQUIRE_LINE)
+    {
+        line_reacquired_pending = 0U;
     }
     requested = SafetyService_Resolve(requested,
                                       app_output.user_stop_requested,

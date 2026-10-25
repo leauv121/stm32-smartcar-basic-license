@@ -7,7 +7,8 @@ typedef enum
 {
     LINE_FOLLOW_PID = 0,
     LINE_FOLLOW_RESCUE_LEFT,
-    LINE_FOLLOW_RESCUE_RIGHT
+    LINE_FOLLOW_RESCUE_RIGHT,
+    LINE_FOLLOW_FAULT
 } LineFollowMode;
 
 typedef struct
@@ -16,6 +17,7 @@ typedef struct
     uint16_t right_adc;
     uint8_t outer_right;
     uint8_t outer_left;
+    uint8_t sample_ready;
 } LineFollowInput;
 
 typedef struct
@@ -28,6 +30,7 @@ typedef struct
 
 void LineFollowControl_Reset(void);
 void LineFollowControl_Prime(uint16_t left_adc, uint16_t right_adc);
+void LineFollowControl_StartRecovery(LineFollowMode direction);
 LineFollowOutput LineFollowControl_Update(LineFollowInput input);
 
 #endif
