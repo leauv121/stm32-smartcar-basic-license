@@ -21,4 +21,8 @@
 #define CAR_LINE_PID_ERROR_DEADBAND         60
 #define CAR_LINE_PID_SOFT_START_STEP        60
 
+/* 外侧数字传感器触发急弯救线时，保持双轮前进以减少模式切换顿挫。 */
+#define CAR_LINE_RESCUE_OUTER_SPEED        4500
+#define CAR_LINE_RESCUE_INNER_SPEED        1400
+
 #endif

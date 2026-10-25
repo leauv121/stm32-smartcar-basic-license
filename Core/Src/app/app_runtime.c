@@ -251,8 +251,10 @@ void AppRuntime_RunOnce(void)
                            HAL_ADC_STATE_ERROR_DMA)) == 0U))
         {
             SensorService_UpdateLine(adc_data[0], adc_data[1],
-                (uint8_t)(HAL_GPIO_ReadPin(LINE1_GPIO_Port, LINE1_Pin) == GPIO_PIN_RESET),
-                (uint8_t)(HAL_GPIO_ReadPin(LINE4_GPIO_Port, LINE4_Pin) == GPIO_PIN_RESET),
+                DriverAlgorithms_LineDigitalIsBlack((uint8_t)HAL_GPIO_ReadPin(
+                    LINE1_GPIO_Port, LINE1_Pin)),
+                DriverAlgorithms_LineDigitalIsBlack((uint8_t)HAL_GPIO_ReadPin(
+                    LINE4_GPIO_Port, LINE4_Pin)),
                 now_ms);
         }
     }

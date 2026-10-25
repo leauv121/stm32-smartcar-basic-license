@@ -9,3 +9,4 @@
 3. [2026-10-20：main.c 中文注释编码修复](2026-10-20-main-c-encoding-repair.md)
 4. [2026-10-21：四路 TCRT5000 数字循迹基础实验](2026-10-21-four-channel-digital-tracking.md)
 5. [2026-10-22：PID 模拟量循迹、姿态计圈与自动掉头](2026-10-22-pid-tracking-lap-mission.md)
+6. [2026-10-25：最终循迹代码迁移与兼容接口统一](2026-10-25-final-tracking-migration.md)

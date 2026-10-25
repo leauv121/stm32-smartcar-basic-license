@@ -6,6 +6,10 @@ int main(void)
     ColorConfirmState color = {0};
     KeyDebounceState key = {0};
 
+    /* 原车四路循迹模块的 DO 输出：高电平表示检测到黑线。 */
+    TEST_ASSERT_EQ_INT(0, DriverAlgorithms_LineDigitalIsBlack(0U));
+    TEST_ASSERT_EQ_INT(1, DriverAlgorithms_LineDigitalIsBlack(1U));
+
     TEST_ASSERT_TRUE((DriverAlgorithms_UltrasonicCm(1000U) > 16.99f) &&
                      (DriverAlgorithms_UltrasonicCm(1000U) < 17.01f));
     TEST_ASSERT_TRUE((DriverAlgorithms_SpeedRpm(1000000U, 1000000U) > 59.99f) &&

@@ -22,6 +22,12 @@ uint8_t DriverAlgorithms_IsTimedOut(uint32_t sample_ms,
     return (uint8_t)((uint32_t)(now_ms - sample_ms) >= timeout_ms);
 }
 
+uint8_t DriverAlgorithms_LineDigitalIsBlack(uint8_t raw_level)
+{
+    /* 原车外侧 DO 传感器为高电平有效：1 表示检测到黑线。 */
+    return (uint8_t)(raw_level != 0U);
+}
+
 DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
                                           DriverColor sample,
                                           uint8_t required_count)

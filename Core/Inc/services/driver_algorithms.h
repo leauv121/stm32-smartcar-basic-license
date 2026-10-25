@@ -29,6 +29,7 @@ float DriverAlgorithms_SpeedRpm(uint32_t revolution_ticks, uint32_t timer_hz);
 uint8_t DriverAlgorithms_IsTimedOut(uint32_t sample_ms,
                                     uint32_t now_ms,
                                     uint32_t timeout_ms);
+uint8_t DriverAlgorithms_LineDigitalIsBlack(uint8_t raw_level);
 DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
                                           DriverColor sample,
                                           uint8_t required_count);

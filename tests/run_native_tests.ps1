@@ -24,6 +24,7 @@ $sourceMap = @{
     'test_line_follow_control.c' = @('Core\Src\control\line_follow_control.c')
     'test_turn_control.c' = @('Core\Src\control\turn_control.c')
     'test_command_parser.c' = @('Core\Src\app\command_parser.c')
+    'test_car_control_compat.c' = @('Core\Src\control\line_follow_control.c')
     'test_normal_mission.c' = @('Core\Src\app\normal_mission.c')
     'test_advanced_mission.c' = @('Core\Src\app\advanced_mission.c')
     'test_route_detector.c' = @('Core\Src\app\route_detector.c')
