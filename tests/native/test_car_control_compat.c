@@ -63,9 +63,11 @@ static void test_legacy_hybrid_uses_weak_rescue(void)
 
     Line_Following_PID_Reset();
     Line_Following_Hybrid(2000U, 2000U);
+    TEST_ASSERT_EQ_INT('N', Line_Following_Get_Mode());
+    Line_Following_Hybrid(2000U, 2000U);
 
     TEST_ASSERT_EQ_INT('R', Line_Following_Get_Mode());
-    TEST_ASSERT_EQ_INT(4500, captured_motion.left_target);
+    TEST_ASSERT_EQ_INT(3600, captured_motion.left_target);
     TEST_ASSERT_EQ_INT(1400, captured_motion.right_target);
 }
 

@@ -12,3 +12,4 @@
 6. [2026-10-25：最终循迹代码迁移与兼容接口统一](2026-10-25-final-tracking-migration.md)
 7. [2026-10-25：普通驾照掉头与返程终点检测](2026-10-25-normal-license-turn-return.md)
 8. [2026-10-25：掉头回线与外侧救线负反馈](2026-10-25-line-reacquire-feedback.md)
+9. [2026-10-25：居中加速与偏离降速循迹](2026-10-25-adaptive-line-speed.md)
