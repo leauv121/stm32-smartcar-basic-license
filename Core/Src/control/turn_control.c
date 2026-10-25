@@ -54,7 +54,9 @@ TurnResult TurnControl_Update(float current_yaw, uint8_t yaw_valid, uint32_t now
     last_yaw = current_yaw;
 
     directed_delta = delta * (float)turn_direction;
-    if (directed_delta > 0.0f) progress_angle += directed_delta;
+    /* 使用净转角累计：反向回摆必须扣除，避免不足 180 度就提前完成。 */
+    progress_angle += directed_delta;
+    if (progress_angle < 0.0f) progress_angle = 0.0f;
     if (progress_angle >= target_angle) turn_state = TURN_COMPLETE;
     return turn_state;
 }

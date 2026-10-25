@@ -7,6 +7,7 @@
 #include "app/app_controller.h"
 #include "app/route_detector.h"
 #include "config/app_config.h"
+#include "config/car_parameters.h"
 #include "control/line_follow_control.h"
 #include "control/motion_control.h"
 #include "control/turn_control.h"
@@ -33,7 +34,6 @@
 #include "mpu6050_dmp.h"
 
 #define ADC_CHANNEL_COUNT 2U
-#define OBSTACLE_DISTANCE_CM 20.0f
 #define HAZARD_HOLD_MS 1000U
 
 static volatile uint16_t adc_data[ADC_CHANNEL_COUNT];
@@ -222,6 +222,7 @@ void AppRuntime_RunOnce(void)
     MotionRequest requested;
     AppState previous_state = AppController_GetState();
     uint8_t yaw_required;
+    uint8_t distance_sample_updated = 0U;
 
     (void)memset(&app_input, 0, sizeof(app_input));
     if (adc_error_pending != 0U)
@@ -264,6 +265,7 @@ void AppRuntime_RunOnce(void)
         if (HC_SR04IsDataReady() != 0U)
         {
             SensorService_UpdateDistance(HC_SR04Read(), now_ms);
+            distance_sample_updated = 1U;
             HardwareAdapter_SetRuntimeStatus(DRIVER_OK,
                                              hardware_health.speed,
                                              hardware_health.battery);
@@ -329,7 +331,10 @@ void AppRuntime_RunOnce(void)
     app_input.normal.red_detected = (uint8_t)(sensor->color.value == SENSOR_COLOR_RED);
     app_input.normal.green_detected = (uint8_t)(sensor->color.value == SENSOR_COLOR_GREEN);
     app_input.normal.obstacle_detected = (uint8_t)(sensor->distance_cm.valid &&
-        (sensor->distance_cm.value <= OBSTACLE_DISTANCE_CM));
+        (sensor->distance_cm.value <= CAR_OBSTACLE_DETECT_DISTANCE_CM));
+    app_input.normal.obstacle_cleared = (uint8_t)(sensor->distance_cm.valid &&
+        (sensor->distance_cm.value > CAR_OBSTACLE_CLEAR_DISTANCE_CM));
+    app_input.normal.obstacle_sample_ready = distance_sample_updated;
     if ((NormalMission_GetState() == NORMAL_OBSTACLE_HOLD) &&
         (obstacle_hold_started_ms == 0U))
     {
@@ -340,7 +345,8 @@ void AppRuntime_RunOnce(void)
     if ((NormalMission_GetState() == NORMAL_AVOID_TURN) && (avoid_turn_started == 0U) &&
         sensor->yaw.valid)
     {
-        TurnControl_Start(sensor->yaw.value, 90.0f, TURN_RIGHT, now_ms);
+        TurnControl_Start(sensor->yaw.value, CAR_AVOID_TURN_TARGET_DEG,
+                          TURN_RIGHT, now_ms);
         avoid_turn_started = 1U;
     }
     if (avoid_turn_started != 0U)
@@ -355,7 +361,6 @@ void AppRuntime_RunOnce(void)
                                 ERROR_LEVEL_FATAL, now_ms, 0U);
         }
     }
-    app_input.normal.home_detected = (uint8_t)(sensor->line.outer_left && sensor->line.outer_right);
     app_input.normal.fatal_error = ErrorManager_HasFatal();
     app_input.advanced.route_event = DetectRouteEvent();
     app_input.advanced.fatal_error = ErrorManager_HasFatal();

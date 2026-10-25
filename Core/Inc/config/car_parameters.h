@@ -25,4 +25,10 @@
 #define CAR_LINE_RESCUE_OUTER_SPEED        4500
 #define CAR_LINE_RESCUE_INNER_SPEED        1400
 
+/* 普通驾照障碍物掉头与返程终点检测参数。 */
+#define CAR_OBSTACLE_DETECT_DISTANCE_CM     20.0f
+#define CAR_OBSTACLE_CLEAR_DISTANCE_CM      30.0f
+#define CAR_OBSTACLE_CONFIRM_SAMPLES         3U
+#define CAR_AVOID_TURN_TARGET_DEG           180.0f
+
 #endif

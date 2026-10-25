@@ -2,11 +2,21 @@
 #include "config/car_parameters.h"
 
 static NormalMissionState state;
+static uint8_t obstacle_clear_count;
+static uint8_t return_obstacle_count;
+
+static void reset_return_detection(void)
+{
+    obstacle_clear_count = 0U;
+    return_obstacle_count = 0U;
+}
 
 static MissionOutput output_for_state(void)
 {
     MissionOutput output = {MotionRequest_Stop(), INDICATOR_OFF, 0U, 0U};
-    if ((state == NORMAL_TRACK_OUT) || (state == NORMAL_RETURN))
+    if ((state == NORMAL_TRACK_OUT) ||
+        (state == NORMAL_RETURN_CLEAR) ||
+        (state == NORMAL_RETURN))
     {
         output.motion.mode = MOTION_DRIVE;
         output.motion.left_target = CAR_LINE_PID_BASE_SPEED;
@@ -25,9 +35,24 @@ static MissionOutput output_for_state(void)
     return output;
 }
 
-void NormalMission_Init(void) { state = NORMAL_WAIT_START; }
-void NormalMission_Start(uint32_t now_ms) { (void)now_ms; state = NORMAL_START_FLASH; }
-void NormalMission_Stop(void) { state = NORMAL_WAIT_START; }
+void NormalMission_Init(void)
+{
+    state = NORMAL_WAIT_START;
+    reset_return_detection();
+}
+
+void NormalMission_Start(uint32_t now_ms)
+{
+    (void)now_ms;
+    state = NORMAL_START_FLASH;
+    reset_return_detection();
+}
+
+void NormalMission_Stop(void)
+{
+    state = NORMAL_WAIT_START;
+    reset_return_detection();
+}
 NormalMissionState NormalMission_GetState(void) { return state; }
 
 MissionOutput NormalMission_Update(const NormalMissionInput *input, uint32_t now_ms)
@@ -40,7 +65,47 @@ MissionOutput NormalMission_Update(const NormalMissionInput *input, uint32_t now
     else if ((state == NORMAL_RED_WAIT) && (input->green_detected != 0U)) state = NORMAL_TRACK_OUT;
     else if ((state == NORMAL_TRACK_OUT) && (input->obstacle_detected != 0U)) state = NORMAL_OBSTACLE_HOLD;
     else if ((state == NORMAL_OBSTACLE_HOLD) && (input->hazard_hold_done != 0U)) state = NORMAL_AVOID_TURN;
-    else if ((state == NORMAL_AVOID_TURN) && (input->turn_complete != 0U)) state = NORMAL_RETURN;
-    else if ((state == NORMAL_RETURN) && (input->home_detected != 0U)) state = NORMAL_COMPLETE;
+    else if ((state == NORMAL_AVOID_TURN) && (input->turn_complete != 0U))
+    {
+        state = NORMAL_RETURN_CLEAR;
+        reset_return_detection();
+    }
+    else if ((state == NORMAL_RETURN_CLEAR) && (input->obstacle_sample_ready != 0U))
+    {
+        if (input->obstacle_cleared != 0U)
+        {
+            if (obstacle_clear_count < CAR_OBSTACLE_CONFIRM_SAMPLES)
+            {
+                obstacle_clear_count++;
+            }
+        }
+        else
+        {
+            obstacle_clear_count = 0U;
+        }
+        if (obstacle_clear_count >= CAR_OBSTACLE_CONFIRM_SAMPLES)
+        {
+            state = NORMAL_RETURN;
+            return_obstacle_count = 0U;
+        }
+    }
+    else if ((state == NORMAL_RETURN) && (input->obstacle_sample_ready != 0U))
+    {
+        if (input->obstacle_detected != 0U)
+        {
+            if (return_obstacle_count < CAR_OBSTACLE_CONFIRM_SAMPLES)
+            {
+                return_obstacle_count++;
+            }
+        }
+        else
+        {
+            return_obstacle_count = 0U;
+        }
+        if (return_obstacle_count >= CAR_OBSTACLE_CONFIRM_SAMPLES)
+        {
+            state = NORMAL_COMPLETE;
+        }
+    }
     return output_for_state();
 }
