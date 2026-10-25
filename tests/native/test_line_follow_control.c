@@ -80,6 +80,66 @@ static void test_outer_hint_direction_stays_latched_after_short_pulse(void)
     TEST_ASSERT_TRUE(output.left_target > output.right_target);
 }
 
+static void test_single_center_sample_does_not_release_outer_direction(void)
+{
+    LineFollowOutput output;
+    LineFollowInput curve = {2600U, 1200U, 1U, 0U, 1U};
+    LineFollowInput centered = {2800U, 2800U, 0U, 0U, 1U};
+
+    LineFollowControl_Reset();
+    output = LineFollowControl_Update(curve);
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    output = LineFollowControl_Update(centered);
+
+    curve.outer_right = 0U;
+    output = LineFollowControl_Update(curve);
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
+}
+
+static void test_pending_outer_direction_releases_after_three_center_samples(void)
+{
+    LineFollowOutput output;
+    LineFollowInput curve = {2600U, 1200U, 1U, 0U, 1U};
+    LineFollowInput centered = {2800U, 2800U, 0U, 0U, 1U};
+    uint8_t index;
+
+    LineFollowControl_Reset();
+    (void)LineFollowControl_Update(curve);
+    for (index = 0U; index < CAR_LINE_CURVE_RELEASE_SAMPLES; index++)
+    {
+        output = LineFollowControl_Update(centered);
+    }
+    TEST_ASSERT_EQ_INT(0, output.pid_output);
+
+    curve.outer_right = 0U;
+    output = LineFollowControl_Update(curve);
+    TEST_ASSERT_TRUE(output.pid_output < 0);
+    TEST_ASSERT_TRUE(output.left_target < output.right_target);
+}
+
+static void test_curve_release_resynchronizes_pid_history(void)
+{
+    LineFollowOutput output;
+    LineFollowInput curve = {2600U, 1200U, 1U, 0U, 1U};
+    LineFollowInput centered = {2800U, 2800U, 0U, 0U, 1U};
+    uint8_t index;
+
+    LineFollowControl_Reset();
+    for (index = 0U; index < CAR_LINE_CURVE_CONFIRM_SAMPLES; index++)
+    {
+        output = LineFollowControl_Update(curve);
+    }
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+
+    for (index = 0U; index < CAR_LINE_CURVE_RELEASE_SAMPLES; index++)
+    {
+        output = LineFollowControl_Update(centered);
+    }
+    TEST_ASSERT_EQ_INT(0, output.pid_output);
+    TEST_ASSERT_EQ_INT(output.left_target, output.right_target);
+}
+
 static void test_outer_hint_direction_does_not_require_large_adc_error(void)
 {
     LineFollowOutput output;
@@ -352,6 +412,9 @@ int main(void)
     test_consistent_curve_error_enters_strong_pid();
     test_outer_hint_keeps_curve_direction_when_adc_sign_conflicts();
     test_outer_hint_direction_stays_latched_after_short_pulse();
+    test_single_center_sample_does_not_release_outer_direction();
+    test_pending_outer_direction_releases_after_three_center_samples();
+    test_curve_release_resynchronizes_pid_history();
     test_outer_hint_direction_does_not_require_large_adc_error();
     test_outer_hint_is_kept_as_lost_line_search_direction();
     test_left_and_right_outer_hints_produce_mirrored_outputs();

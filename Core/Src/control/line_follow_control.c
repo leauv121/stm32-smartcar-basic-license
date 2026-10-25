@@ -19,6 +19,7 @@ static uint8_t curve_candidate_count;
 static uint8_t curve_release_count;
 static uint8_t curve_active;
 static uint8_t curve_outer_direction_latched;
+static uint8_t curve_just_released;
 static int32_t curve_direction;
 static LineFollowMode last_search_direction;
 static LineFollowOutput last_output;
@@ -86,6 +87,7 @@ static void reset_tracking_confidence(void)
     curve_release_count = 0U;
     curve_active = 0U;
     curve_outer_direction_latched = 0U;
+    curve_just_released = 0U;
     curve_direction = 0;
 }
 
@@ -132,6 +134,7 @@ static void update_curve_state(LineFollowInput input,
                 curve_candidate_count = 0U;
                 curve_outer_direction_latched = 0U;
                 curve_direction = 0;
+                curve_just_released = 1U;
             }
         }
         else
@@ -141,9 +144,9 @@ static void update_curve_state(LineFollowInput input,
         return;
     }
 
-    curve_release_count = 0U;
     if (complete_line_loss != 0U)
     {
+        curve_release_count = 0U;
         curve_candidate_count = 0U;
         return;
     }
@@ -151,20 +154,29 @@ static void update_curve_state(LineFollowInput input,
     {
         if (line_is_centered(input) != 0U)
         {
-            curve_candidate_count = 0U;
-            curve_outer_direction_latched = 0U;
-            curve_direction = 0;
+            increment_u8(&curve_release_count, CAR_LINE_CURVE_RELEASE_SAMPLES);
+            if (curve_release_count >= CAR_LINE_CURVE_RELEASE_SAMPLES)
+            {
+                curve_candidate_count = 0U;
+                curve_outer_direction_latched = 0U;
+                curve_direction = 0;
+                curve_release_count = 0U;
+                curve_just_released = 1U;
+            }
             return;
         }
+        curve_release_count = 0U;
         candidate_direction = curve_direction;
     }
     else if (outer_direction != 0)
     {
+        curve_release_count = 0U;
         curve_outer_direction_latched = 1U;
         candidate_direction = outer_direction;
     }
     else
     {
+        curve_release_count = 0U;
         candidate_direction = curve_adc_direction(error);
     }
 
@@ -267,6 +279,7 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
 
     previous_mode = current_mode;
     center_was_confirmed = 0U;
+    curve_just_released = 0U;
 
     if (current_mode != LINE_FOLLOW_PID)
     {
@@ -372,6 +385,14 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         last_search_direction = (curve_direction > 0) ?
                                 LINE_FOLLOW_RESCUE_RIGHT :
                                 LINE_FOLLOW_RESCUE_LEFT;
+    }
+    if (curve_just_released != 0U)
+    {
+        /* 与历史固定救线返回 PID 一致，防止旧微分造成反向回摆。 */
+        last_error = error;
+        integral = 0;
+        filtered_derivative = 0;
+        primed = 1U;
     }
 
     if (line_is_centered(input) != 0U)
