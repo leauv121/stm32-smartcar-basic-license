@@ -40,7 +40,6 @@ DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
     if (sample != state->candidate)
     {
         state->candidate = sample;
-        state->emitted = DRIVER_COLOR_NONE;
         state->consecutive_count = 1U;
     }
     else if (state->consecutive_count < required_count)
@@ -48,13 +47,12 @@ DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
         state->consecutive_count++;
     }
 
-    if ((state->consecutive_count >= required_count) &&
-        (state->emitted != state->candidate))
+    if (state->consecutive_count >= required_count)
     {
         state->emitted = state->candidate;
-        return state->candidate;
     }
-    return DRIVER_COLOR_NONE;
+    /* 返回当前稳定状态而不是单次事件，保证持续刷新传感器时间戳。 */
+    return state->emitted;
 }
 
 void DriverAlgorithms_KeyInit(KeyDebounceState *state,

@@ -81,6 +81,25 @@ static void test_required_line_and_enabled_color_without_data_report_timeout(voi
     TEST_ASSERT_EQ_INT(ERROR_LEVEL_FATAL, record->level);
 }
 
+static void test_continuous_color_timeout_is_reported_once(void)
+{
+    const ErrorRecord *record;
+
+    ErrorManager_Init();
+    SensorService_Init();
+    SensorService_SetSourceEnabled(SENSOR_SOURCE_LINE, 0U);
+    SensorService_SetSourceEnabled(SENSOR_SOURCE_ULTRASONIC, 0U);
+
+    SensorService_CheckTimeouts(600U, 0U);
+    SensorService_CheckTimeouts(700U, 0U);
+    SensorService_CheckTimeouts(800U, 0U);
+
+    record = ErrorManager_GetHighest();
+    TEST_ASSERT_TRUE(record != 0);
+    TEST_ASSERT_EQ_INT(ERR_MODULE_COLOR, record->module);
+    TEST_ASSERT_EQ_INT(1, record->occurrence_count);
+}
+
 int main(void)
 {
     test_updates_produce_valid_timestamped_snapshot();
@@ -88,5 +107,6 @@ int main(void)
     test_disabled_optional_sources_do_not_report_errors();
     test_enabled_ultrasonic_without_echo_reports_timeout();
     test_required_line_and_enabled_color_without_data_report_timeout();
+    test_continuous_color_timeout_is_reported_once();
     return test_failures;
 }

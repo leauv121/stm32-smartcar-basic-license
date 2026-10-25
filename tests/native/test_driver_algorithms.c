@@ -20,7 +20,15 @@ int main(void)
                        DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_RED, 3U));
     TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
                        DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_RED, 3U));
-    TEST_ASSERT_EQ_INT(DRIVER_COLOR_NONE,
+    /* 稳定保持红色时仍应持续返回红色，用于刷新传感器时间戳。 */
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_RED, 3U));
+    /* 切换颜色期间保持上一个稳定结果，直到绿色连续确认。 */
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_GREEN, 3U));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_GREEN, 3U));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_GREEN,
                        DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_GREEN, 3U));
 
     DriverAlgorithms_KeyInit(&key, 0U, 0U);
