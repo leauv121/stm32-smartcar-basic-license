@@ -378,11 +378,15 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     output.pid_output = (int32_t)(CAR_LINE_PID_KP * (float)error +
                                   CAR_LINE_PID_KI * (float)integral +
                                   CAR_LINE_PID_KD * (float)filtered_derivative);
-    if (curve_active != 0U)
+    if ((curve_direction != 0) && (curve_candidate_count != 0U))
     {
         int32_t magnitude = (output.pid_output < 0) ?
                             -output.pid_output : output.pid_output;
+        /* 确认弯道的前两帧也按外侧方向转，但仍使用普通 PID 强度。 */
         output.pid_output = (curve_direction < 0) ? -magnitude : magnitude;
+    }
+    if (curve_active != 0U)
+    {
         output.pid_output = (output.pid_output * CAR_LINE_CURVE_PID_GAIN_NUM) /
                             CAR_LINE_CURVE_PID_GAIN_DEN;
         output.pid_output = clamp_value(output.pid_output,

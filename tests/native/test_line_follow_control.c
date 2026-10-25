@@ -50,13 +50,34 @@ static void test_outer_hint_keeps_curve_direction_when_adc_sign_conflicts(void)
     LineFollowInput input = {2600U, 1200U, 1U, 0U, 1U};
 
     LineFollowControl_Reset();
-    (void)LineFollowControl_Update(input);
-    (void)LineFollowControl_Update(input);
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_TRUE(output.pid_output > 0);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
     output = LineFollowControl_Update(input);
 
     /* 历史版本外右触发始终右转，不能被瞬时相反 ADC 误差带偏。 */
     TEST_ASSERT_TRUE(output.pid_output > 0);
     TEST_ASSERT_TRUE(output.left_target > output.right_target);
+}
+
+static void test_left_and_right_outer_hints_produce_mirrored_outputs(void)
+{
+    LineFollowOutput right_output;
+    LineFollowOutput left_output;
+    LineFollowInput right_curve = {2600U, 1200U, 1U, 0U, 1U};
+    LineFollowInput left_curve = {1200U, 2600U, 0U, 1U, 1U};
+
+    LineFollowControl_Reset();
+    right_output = LineFollowControl_Update(right_curve);
+    LineFollowControl_Reset();
+    left_output = LineFollowControl_Update(left_curve);
+
+    TEST_ASSERT_EQ_INT(right_output.pid_output, -left_output.pid_output);
+    TEST_ASSERT_EQ_INT(right_output.left_target, left_output.right_target);
+    TEST_ASSERT_EQ_INT(right_output.right_target, left_output.left_target);
 }
 
 static void test_stable_center_accelerates_and_sustained_deviation_slows(void)
@@ -281,6 +302,7 @@ int main(void)
     test_outer_sensor_alone_does_not_trigger_fixed_rescue();
     test_consistent_curve_error_enters_strong_pid();
     test_outer_hint_keeps_curve_direction_when_adc_sign_conflicts();
+    test_left_and_right_outer_hints_produce_mirrored_outputs();
     test_stable_center_accelerates_and_sustained_deviation_slows();
     test_sustained_large_deviation_uses_strong_correction();
     test_complete_line_loss_enters_slow_search_in_last_error_direction();
