@@ -15,6 +15,10 @@ static uint8_t deviation_sample_count;
 static uint8_t lost_sample_count;
 static uint8_t outer_right_count;
 static uint8_t outer_left_count;
+static uint8_t curve_candidate_count;
+static uint8_t curve_release_count;
+static uint8_t curve_active;
+static int32_t curve_direction;
 static LineFollowMode last_search_direction;
 static LineFollowOutput last_output;
 
@@ -77,6 +81,89 @@ static void reset_tracking_confidence(void)
     lost_sample_count = 0U;
     outer_right_count = 0U;
     outer_left_count = 0U;
+    curve_candidate_count = 0U;
+    curve_release_count = 0U;
+    curve_active = 0U;
+    curve_direction = 0;
+}
+
+static void increment_u8(uint8_t *value, uint8_t maximum);
+
+static uint8_t curve_candidate(uint16_t left_adc,
+                               uint16_t right_adc,
+                               uint8_t outer_right,
+                               uint8_t outer_left,
+                               int32_t error)
+{
+    int32_t magnitude = (error < 0) ? -error : error;
+
+    if (magnitude < CAR_LINE_CURVE_ERROR_MIN)
+    {
+        return 0U;
+    }
+    if ((error > 0) && (outer_right != 0U))
+    {
+        return 1U;
+    }
+    if ((error < 0) && (outer_left != 0U))
+    {
+        return 1U;
+    }
+    /* 没有外侧提示时，只有更大的持续误差才视为弯道。 */
+    (void)left_adc;
+    (void)right_adc;
+    return (uint8_t)(magnitude >= (CAR_LINE_CURVE_ERROR_MIN * 2));
+}
+
+static void update_curve_state(LineFollowInput input,
+                               int32_t error,
+                               uint8_t complete_line_loss)
+{
+    uint8_t candidate = (uint8_t)((complete_line_loss == 0U) &&
+        (curve_candidate(input.left_adc, input.right_adc,
+                         input.outer_right, input.outer_left, error) != 0U));
+
+    if (curve_active != 0U)
+    {
+        if (line_is_centered(input) != 0U)
+        {
+            increment_u8(&curve_release_count, CAR_LINE_CURVE_RELEASE_SAMPLES);
+            if (curve_release_count >= CAR_LINE_CURVE_RELEASE_SAMPLES)
+            {
+                curve_active = 0U;
+                curve_release_count = 0U;
+                curve_candidate_count = 0U;
+            }
+        }
+        else
+        {
+            curve_release_count = 0U;
+        }
+        return;
+    }
+
+    curve_release_count = 0U;
+    if (candidate == 0U)
+    {
+        curve_candidate_count = 0U;
+        curve_direction = 0;
+        return;
+    }
+    if ((curve_direction != 0) &&
+        (((curve_direction > 0) && (error < 0)) ||
+         ((curve_direction < 0) && (error > 0))))
+    {
+        curve_candidate_count = 1U;
+    }
+    else
+    {
+        increment_u8(&curve_candidate_count, CAR_LINE_CURVE_CONFIRM_SAMPLES);
+    }
+    curve_direction = (error > 0) ? 1 : -1;
+    if (curve_candidate_count >= CAR_LINE_CURVE_CONFIRM_SAMPLES)
+    {
+        curve_active = 1U;
+    }
 }
 
 static void increment_u8(uint8_t *value, uint8_t maximum)
@@ -225,41 +312,6 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         primed = 1U;
     }
 
-    if ((input.outer_right != 0U) && (input.outer_left == 0U))
-    {
-        increment_u8(&outer_right_count, CAR_LINE_OUTER_CONFIRM_SAMPLES);
-        outer_left_count = 0U;
-    }
-    else if ((input.outer_left != 0U) && (input.outer_right == 0U))
-    {
-        increment_u8(&outer_left_count, CAR_LINE_OUTER_CONFIRM_SAMPLES);
-        outer_right_count = 0U;
-    }
-    else
-    {
-        outer_right_count = 0U;
-        outer_left_count = 0U;
-    }
-
-    if (outer_right_count >= CAR_LINE_OUTER_CONFIRM_SAMPLES)
-    {
-        current_mode = LINE_FOLLOW_RESCUE_RIGHT;
-        forced_recovery = 0U;
-        recenter_count = 0U;
-        last_search_direction = current_mode;
-        last_output = recovery_output(current_mode);
-        return last_output;
-    }
-    if (outer_left_count >= CAR_LINE_OUTER_CONFIRM_SAMPLES)
-    {
-        current_mode = LINE_FOLLOW_RESCUE_LEFT;
-        forced_recovery = 0U;
-        recenter_count = 0U;
-        last_search_direction = current_mode;
-        last_output = recovery_output(current_mode);
-        return last_output;
-    }
-
     current_mode = LINE_FOLLOW_PID;
     error = line_error(input.left_adc, input.right_adc);
     complete_line_loss = (uint8_t)(
@@ -290,6 +342,8 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     {
         last_search_direction = LINE_FOLLOW_RESCUE_LEFT;
     }
+
+    update_curve_state(input, error, complete_line_loss);
 
     if (line_is_centered(input) != 0U)
     {
@@ -329,15 +383,25 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     output.pid_output = (int32_t)(CAR_LINE_PID_KP * (float)error +
                                   CAR_LINE_PID_KI * (float)integral +
                                   CAR_LINE_PID_KD * (float)filtered_derivative);
-    output.pid_output = clamp_value(output.pid_output,
-                                    -CAR_LINE_PID_OUTPUT_LIMIT,
-                                    CAR_LINE_PID_OUTPUT_LIMIT);
-    if ((deviation_sample_count >= CAR_LINE_DEVIATION_SLOW_SAMPLES) ||
-        (outer_right_count != 0U) || (outer_left_count != 0U))
+    if (curve_active != 0U)
+    {
+        output.pid_output = (output.pid_output * CAR_LINE_CURVE_PID_GAIN_NUM) /
+                            CAR_LINE_CURVE_PID_GAIN_DEN;
+        output.pid_output = clamp_value(output.pid_output,
+                                        -CAR_LINE_CURVE_OUTPUT_LIMIT,
+                                        CAR_LINE_CURVE_OUTPUT_LIMIT);
+    }
+    else
     {
         output.pid_output = clamp_value(output.pid_output,
-                                        -CAR_LINE_CAUTION_OUTPUT_LIMIT,
-                                        CAR_LINE_CAUTION_OUTPUT_LIMIT);
+                                        -CAR_LINE_PID_OUTPUT_LIMIT,
+                                        CAR_LINE_PID_OUTPUT_LIMIT);
+        if (deviation_sample_count >= CAR_LINE_DEVIATION_SLOW_SAMPLES)
+        {
+            output.pid_output = clamp_value(output.pid_output,
+                                            -CAR_LINE_CAUTION_OUTPUT_LIMIT,
+                                            CAR_LINE_CAUTION_OUTPUT_LIMIT);
+        }
     }
     last_error = error;
 
@@ -346,8 +410,7 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
         base_speed = approach_speed(base_speed, CAR_LINE_CENTER_FAST_SPEED);
     }
     else if ((deviation_sample_count >= CAR_LINE_DEVIATION_SLOW_SAMPLES) ||
-             (lost_sample_count != 0U) ||
-             (outer_right_count != 0U) || (outer_left_count != 0U))
+             (lost_sample_count != 0U))
     {
         base_speed = approach_speed(base_speed, CAR_LINE_CAUTION_SPEED);
     }
@@ -361,6 +424,17 @@ LineFollowOutput LineFollowControl_Update(LineFollowInput input)
     output.right_target = (int16_t)clamp_value(base_speed - output.pid_output,
                                                 0,
                                                 CAR_LINE_PID_MAX_SPEED);
+    if (curve_active != 0U)
+    {
+        if (output.left_target < CAR_LINE_CURVE_MIN_WHEEL_SPEED)
+        {
+            output.left_target = CAR_LINE_CURVE_MIN_WHEEL_SPEED;
+        }
+        if (output.right_target < CAR_LINE_CURVE_MIN_WHEEL_SPEED)
+        {
+            output.right_target = CAR_LINE_CURVE_MIN_WHEEL_SPEED;
+        }
+    }
     last_output = output;
     return last_output;
 }

@@ -56,7 +56,7 @@ static void test_legacy_pid_uses_filtered_controller(void)
     TEST_ASSERT_EQ_INT(1610, captured_motion.right_target);
 }
 
-static void test_legacy_hybrid_uses_strong_rescue(void)
+static void test_legacy_hybrid_keeps_outer_hint_in_pid(void)
 {
     fake_outer_right = GPIO_PIN_SET;
     fake_outer_left = GPIO_PIN_RESET;
@@ -66,14 +66,13 @@ static void test_legacy_hybrid_uses_strong_rescue(void)
     TEST_ASSERT_EQ_INT('N', Line_Following_Get_Mode());
     Line_Following_Hybrid(2000U, 2000U);
 
-    TEST_ASSERT_EQ_INT('R', Line_Following_Get_Mode());
-    TEST_ASSERT_EQ_INT(4600, captured_motion.left_target);
-    TEST_ASSERT_EQ_INT(400, captured_motion.right_target);
+    TEST_ASSERT_EQ_INT('N', Line_Following_Get_Mode());
+    TEST_ASSERT_EQ_INT(captured_motion.left_target, captured_motion.right_target);
 }
 
 int main(void)
 {
     test_legacy_pid_uses_filtered_controller();
-    test_legacy_hybrid_uses_strong_rescue();
+    test_legacy_hybrid_keeps_outer_hint_in_pid();
     return test_failures;
 }

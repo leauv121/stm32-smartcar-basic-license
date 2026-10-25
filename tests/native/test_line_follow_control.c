@@ -14,7 +14,7 @@ static void test_centered_line_drives_both_wheels_equally(void)
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
 }
 
-static void test_outer_sensors_request_rescue_turns(void)
+static void test_outer_sensor_alone_does_not_trigger_fixed_rescue(void)
 {
     LineFollowOutput output;
     LineFollowInput input = {2000U, 2000U, 1U, 0U, 1U};
@@ -23,18 +23,31 @@ static void test_outer_sensors_request_rescue_turns(void)
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
     output = LineFollowControl_Update(input);
-    TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
-    TEST_ASSERT_EQ_INT(4600, output.left_target);
-    TEST_ASSERT_EQ_INT(400, output.right_target);
+    TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
+    TEST_ASSERT_EQ_INT(output.left_target, output.right_target);
+}
 
+static void test_consistent_curve_error_enters_strong_pid(void)
+{
+    LineFollowOutput output;
+    LineFollowInput input = {1200U, 2600U, 1U, 0U, 1U};
+
+    LineFollowControl_Reset();
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
+    output = LineFollowControl_Update(input);
+    TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
+    TEST_ASSERT_TRUE(output.pid_output > 2000);
+    TEST_ASSERT_TRUE(output.left_target > output.right_target);
+
+    input.left_adc = 2600U;
+    input.right_adc = 1200U;
     input.outer_right = 0U;
     input.outer_left = 1U;
     output = LineFollowControl_Update(input);
-    TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
-    output = LineFollowControl_Update(input);
-    TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_LEFT, output.mode);
-    TEST_ASSERT_EQ_INT(400, output.left_target);
-    TEST_ASSERT_EQ_INT(4600, output.right_target);
+    TEST_ASSERT_TRUE(output.pid_output < -2000);
 }
 
 static void test_stable_center_accelerates_and_sustained_deviation_slows(void)
@@ -88,12 +101,12 @@ static void test_sustained_large_deviation_uses_strong_correction(void)
     output = LineFollowControl_Update(deviated);
     output = LineFollowControl_Update(deviated);
     output = LineFollowControl_Update(deviated);
-    TEST_ASSERT_EQ_INT(2400, output.pid_output);
+    TEST_ASSERT_EQ_INT(2800, output.pid_output);
 
     deviated.left_adc = 3000U;
     deviated.right_adc = 200U;
     output = LineFollowControl_Update(deviated);
-    TEST_ASSERT_EQ_INT(-2400, output.pid_output);
+    TEST_ASSERT_EQ_INT(-2800, output.pid_output);
 }
 
 static void test_complete_line_loss_enters_slow_search_in_last_error_direction(void)
@@ -151,7 +164,7 @@ static void test_returning_from_rescue_resynchronizes_pid_history(void)
 
     LineFollowControl_Reset();
     LineFollowControl_Prime(2000U, 2000U);
-    (void)LineFollowControl_Update(input);
+    LineFollowControl_StartRecovery(LINE_FOLLOW_RESCUE_RIGHT);
     (void)LineFollowControl_Update(input);
 
     input.left_adc = 2600U;
@@ -253,7 +266,8 @@ static void test_recovery_keeps_searching_until_line_is_found(void)
 int main(void)
 {
     test_centered_line_drives_both_wheels_equally();
-    test_outer_sensors_request_rescue_turns();
+    test_outer_sensor_alone_does_not_trigger_fixed_rescue();
+    test_consistent_curve_error_enters_strong_pid();
     test_stable_center_accelerates_and_sustained_deviation_slows();
     test_sustained_large_deviation_uses_strong_correction();
     test_complete_line_loss_enters_slow_search_in_last_error_direction();
