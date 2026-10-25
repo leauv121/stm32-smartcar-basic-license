@@ -31,8 +31,8 @@
 #define CAR_LINE_LOST_SEARCH_SAMPLES         5U
 
 /* 外侧数字传感器触发急弯救线时，保持双轮前进以减少模式切换顿挫。 */
-#define CAR_LINE_RESCUE_OUTER_SPEED        4200
-#define CAR_LINE_RESCUE_INNER_SPEED         800
+#define CAR_LINE_RESCUE_OUTER_SPEED        4600
+#define CAR_LINE_RESCUE_INNER_SPEED         400
 #define CAR_LINE_REACQUIRE_OUTER_SPEED     2400
 #define CAR_LINE_REACQUIRE_INNER_SPEED      700
 #define CAR_LINE_BLACK_ADC_MIN             2000U

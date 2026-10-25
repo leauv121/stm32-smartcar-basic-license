@@ -24,8 +24,8 @@ static void test_outer_sensors_request_rescue_turns(void)
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_PID, output.mode);
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
-    TEST_ASSERT_EQ_INT(4200, output.left_target);
-    TEST_ASSERT_EQ_INT(800, output.right_target);
+    TEST_ASSERT_EQ_INT(4600, output.left_target);
+    TEST_ASSERT_EQ_INT(400, output.right_target);
 
     input.outer_right = 0U;
     input.outer_left = 1U;
@@ -33,8 +33,8 @@ static void test_outer_sensors_request_rescue_turns(void)
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_RIGHT, output.mode);
     output = LineFollowControl_Update(input);
     TEST_ASSERT_EQ_INT(LINE_FOLLOW_RESCUE_LEFT, output.mode);
-    TEST_ASSERT_EQ_INT(800, output.left_target);
-    TEST_ASSERT_EQ_INT(4200, output.right_target);
+    TEST_ASSERT_EQ_INT(400, output.left_target);
+    TEST_ASSERT_EQ_INT(4600, output.right_target);
 }
 
 static void test_stable_center_accelerates_and_sustained_deviation_slows(void)

@@ -67,8 +67,8 @@ static void test_legacy_hybrid_uses_strong_rescue(void)
     Line_Following_Hybrid(2000U, 2000U);
 
     TEST_ASSERT_EQ_INT('R', Line_Following_Get_Mode());
-    TEST_ASSERT_EQ_INT(4200, captured_motion.left_target);
-    TEST_ASSERT_EQ_INT(800, captured_motion.right_target);
+    TEST_ASSERT_EQ_INT(4600, captured_motion.left_target);
+    TEST_ASSERT_EQ_INT(400, captured_motion.right_target);
 }
 
 int main(void)
