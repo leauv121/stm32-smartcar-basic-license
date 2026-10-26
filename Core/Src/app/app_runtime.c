@@ -51,6 +51,20 @@ static uint8_t self_test_announced;
 static float pitch;
 static float roll;
 static float yaw;
+static int16_t line_target_left;
+static int16_t line_target_right;
+static char line_mode;
+
+static char LineFollowModeText(LineFollowMode mode)
+{
+    switch (mode)
+    {
+        case LINE_FOLLOW_RESCUE_LEFT: return 'L';
+        case LINE_FOLLOW_RESCUE_RIGHT: return 'R';
+        case LINE_FOLLOW_PID: return 'P';
+        default: return 'F';
+    }
+}
 
 static SelfTestInputs BuildSelfTestInputs(void)
 {
@@ -154,6 +168,11 @@ static void UpdateDisplay(const AppOutput *app_output, uint32_t now_ms)
         model.mode = app_output->mode;
         model.left_speed = sensor->speed.left;
         model.right_speed = sensor->speed.right;
+        model.outer_right = sensor->line.outer_right;
+        model.outer_left = sensor->line.outer_left;
+        model.line_target_left = line_target_left;
+        model.line_target_right = line_target_right;
+        model.line_mode = line_mode;
         model.distance_cm = sensor->distance_cm.value;
         model.battery_v = sensor->battery_v.value;
         model.yaw = sensor->yaw.value;
@@ -185,6 +204,9 @@ void AppRuntime_Init(void)
     RouteDetector_Init();
     LineFollowControl_Reset();
     line_reacquired_pending = 0U;
+    line_target_left = 0;
+    line_target_right = 0;
+    line_mode = 'P';
     TB6612_Init();
     MotionControl_Apply(SafetyService_Resolve(MotionRequest_Stop(), 0U, 0U));
     AppController_Init();
@@ -397,6 +419,9 @@ void AppRuntime_RunOnce(void)
         LineFollowOutput line_output = LineFollowControl_Update(line_input);
         requested.left_target = line_output.left_target;
         requested.right_target = line_output.right_target;
+        line_target_left = line_output.left_target;
+        line_target_right = line_output.right_target;
+        line_mode = LineFollowModeText(line_output.mode);
         line_reacquired_pending = (uint8_t)(line_output.mode == LINE_FOLLOW_PID);
         if (line_output.mode == LINE_FOLLOW_FAULT)
         {
@@ -414,6 +439,9 @@ void AppRuntime_RunOnce(void)
         LineFollowOutput line_output = LineFollowControl_Update(line_input);
         requested.left_target = line_output.left_target;
         requested.right_target = line_output.right_target;
+        line_target_left = line_output.left_target;
+        line_target_right = line_output.right_target;
+        line_mode = LineFollowModeText(line_output.mode);
         line_reacquired_pending = 0U;
         if (line_output.mode == LINE_FOLLOW_FAULT)
         {

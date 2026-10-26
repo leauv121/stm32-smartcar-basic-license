@@ -28,17 +28,6 @@ static const char *ModeText(AppMode mode)
     }
 }
 
-static const char *ColorText(SensorColor color)
-{
-    switch (color)
-    {
-        case SENSOR_COLOR_RED: return "RED";
-        case SENSOR_COLOR_GREEN: return "GREEN";
-        case SENSOR_COLOR_OTHER: return "OTHER";
-        default: return "UNKNOWN";
-    }
-}
-
 static void FixedLine(char out[17], const char *source)
 {
     size_t length = strlen(source);
@@ -66,11 +55,14 @@ void DisplayService_FormatNormal(const DisplayModel *model, DisplayLines *out)
     (void)snprintf(buffer, sizeof(buffer), "%s %s",
                    StateText(model->state), ModeText(model->mode));
     FixedLine(out->line[0], buffer);
-    (void)snprintf(buffer, sizeof(buffer), "L:%.1f R:%.1f",
-                   model->left_speed, model->right_speed);
+    (void)snprintf(buffer, sizeof(buffer), "L:%.1f R:%.1f R%uL%u",
+                   model->left_speed, model->right_speed,
+                   (unsigned int)model->outer_right,
+                   (unsigned int)model->outer_left);
     FixedLine(out->line[1], buffer);
-    (void)snprintf(buffer, sizeof(buffer), "D:%.1f %s",
-                   model->distance_cm, ColorText(model->color));
+    (void)snprintf(buffer, sizeof(buffer), "T:%d/%d %c",
+                   (int)model->line_target_left, (int)model->line_target_right,
+                   model->line_mode);
     FixedLine(out->line[2], buffer);
     (void)snprintf(buffer, sizeof(buffer), "Y:%.1f B:%.1fV",
                    model->yaw, model->battery_v);

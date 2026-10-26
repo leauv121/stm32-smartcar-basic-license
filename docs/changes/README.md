@@ -13,3 +13,4 @@
 7. [2026-10-25：普通驾照掉头与返程终点检测](2026-10-25-normal-license-turn-return.md)
 8. [2026-10-25：掉头回线与外侧救线负反馈](2026-10-25-line-reacquire-feedback.md)
 9. [2026-10-25：居中加速与偏离降速循迹](2026-10-25-adaptive-line-speed.md)
+10. [2026-10-26：恢复已验证循迹基线](2026-10-26-baseline-line-follow-migration.md)
