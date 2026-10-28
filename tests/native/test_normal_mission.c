@@ -66,6 +66,7 @@ int main(void)
     output = NormalMission_Update(&input, 3100U);
     TEST_ASSERT_EQ_INT(NORMAL_RED_WAIT, NormalMission_GetState());
     TEST_ASSERT_EQ_INT(MOTION_STOP, output.motion.mode);
+    TEST_ASSERT_EQ_INT(INDICATOR_BOTH_ON, output.indicator);
 
     /* 红灯等待不能被时间或障碍物事件解除，只能由绿灯解除。 */
     input = no_event();
@@ -73,6 +74,7 @@ int main(void)
     output = NormalMission_Update(&input, 10000U);
     TEST_ASSERT_EQ_INT(NORMAL_RED_WAIT, NormalMission_GetState());
     TEST_ASSERT_EQ_INT(MOTION_STOP, output.motion.mode);
+    TEST_ASSERT_EQ_INT(INDICATOR_BOTH_ON, output.indicator);
 
     input = no_event();
     input.green_detected = 1U;
@@ -88,8 +90,8 @@ int main(void)
     input.hazard_hold_done = 1U;
     output = NormalMission_Update(&input, 4300U);
     TEST_ASSERT_EQ_INT(NORMAL_AVOID_TURN, NormalMission_GetState());
-    TEST_ASSERT_EQ_INT(3200, output.motion.left_target);
-    TEST_ASSERT_EQ_INT(-3200, output.motion.right_target);
+    TEST_ASSERT_EQ_INT(5000, output.motion.left_target);
+    TEST_ASSERT_EQ_INT(-5000, output.motion.right_target);
 
     input = no_event();
     input.turn_complete = 1U;

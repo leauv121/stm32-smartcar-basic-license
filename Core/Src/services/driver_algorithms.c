@@ -28,6 +28,24 @@ uint8_t DriverAlgorithms_LineDigitalIsBlack(uint8_t raw_level)
     return (uint8_t)(raw_level != 0U);
 }
 
+DriverColor DriverAlgorithms_ClassifyColor(uint16_t hue,
+                                           uint8_t saturation)
+{
+    if (saturation < 30U)
+    {
+        return DRIVER_COLOR_NONE;
+    }
+    if ((hue <= 30U) || (hue >= 330U))
+    {
+        return DRIVER_COLOR_RED;
+    }
+    if ((hue >= 80U) && (hue <= 160U))
+    {
+        return DRIVER_COLOR_GREEN;
+    }
+    return DRIVER_COLOR_NONE;
+}
+
 DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
                                           DriverColor sample,
                                           uint8_t required_count)

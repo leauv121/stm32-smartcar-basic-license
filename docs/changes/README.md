@@ -14,3 +14,5 @@
 8. [2026-10-25：掉头回线与外侧救线负反馈](2026-10-25-line-reacquire-feedback.md)
 9. [2026-10-25：居中加速与偏离降速循迹](2026-10-25-adaptive-line-speed.md)
 10. [2026-10-26：恢复已验证循迹基线](2026-10-26-baseline-line-follow-migration.md)
+11. [2026-10-28：普通模式掉头提速与角度调整](2026-10-28-normal-turn-speed-tuning.md)
+12. [2026-10-28：红牌停车锁存与双灯常亮](2026-10-28-normal-red-wait-color-fix.md)

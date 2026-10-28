@@ -46,9 +46,23 @@ static void test_turn_and_hazard_patterns_use_required_intervals(void)
     TEST_ASSERT_EQ_INT(0, output.right_on);
 }
 
+static void test_both_on_pattern_keeps_both_lights_on(void)
+{
+    IndicatorOutput output;
+
+    IndicatorService_Start(INDICATOR_BOTH_ON, 2000U);
+    output = IndicatorService_Update(2000U);
+    TEST_ASSERT_EQ_INT(1, output.left_on);
+    TEST_ASSERT_EQ_INT(1, output.right_on);
+    output = IndicatorService_Update(12000U);
+    TEST_ASSERT_EQ_INT(1, output.left_on);
+    TEST_ASSERT_EQ_INT(1, output.right_on);
+}
+
 int main(void)
 {
     test_startup_pattern_flashes_three_times();
     test_turn_and_hazard_patterns_use_required_intervals();
+    test_both_on_pattern_keeps_both_lights_on();
     return test_failures;
 }

@@ -23,7 +23,8 @@ static MissionOutput output_for_state(void)
         output.motion.right_target = CAR_LINE_PID_BASE_SPEED;
     }
     else if (state == NORMAL_START_FLASH) output.indicator = INDICATOR_STARTUP_FLASH_3;
-    else if ((state == NORMAL_RED_WAIT) || (state == NORMAL_OBSTACLE_HOLD)) output.indicator = INDICATOR_HAZARD;
+    else if (state == NORMAL_RED_WAIT) output.indicator = INDICATOR_BOTH_ON;
+    else if (state == NORMAL_OBSTACLE_HOLD) output.indicator = INDICATOR_HAZARD;
     else if (state == NORMAL_AVOID_TURN)
     {
         output.motion.mode = MOTION_DRIVE;

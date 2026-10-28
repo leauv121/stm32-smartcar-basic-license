@@ -18,6 +18,20 @@ int main(void)
     TEST_ASSERT_TRUE(!DriverAlgorithms_IsTimedOut(100U, 199U, 100U));
     TEST_ASSERT_TRUE(DriverAlgorithms_IsTimedOut(100U, 200U, 100U));
 
+    /* 低饱和度背景不能因色相抖动被误判成红牌或绿牌。 */
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_NONE,
+                       DriverAlgorithms_ClassifyColor(120U, 29U));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_NONE,
+                       DriverAlgorithms_ClassifyColor(0U, 0U));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ClassifyColor(0U, 70U));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ClassifyColor(350U, 70U));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_GREEN,
+                       DriverAlgorithms_ClassifyColor(120U, 70U));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_NONE,
+                       DriverAlgorithms_ClassifyColor(60U, 70U));
+
     TEST_ASSERT_EQ_INT(DRIVER_COLOR_NONE,
                        DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_RED, 3U));
     TEST_ASSERT_EQ_INT(DRIVER_COLOR_NONE,

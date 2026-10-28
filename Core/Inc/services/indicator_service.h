@@ -9,7 +9,8 @@ typedef enum
     INDICATOR_STARTUP_FLASH_3,
     INDICATOR_TURN_LEFT,
     INDICATOR_TURN_RIGHT,
-    INDICATOR_HAZARD
+    INDICATOR_HAZARD,
+    INDICATOR_BOTH_ON
 } IndicatorPattern;
 
 typedef struct

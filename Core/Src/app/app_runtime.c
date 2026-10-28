@@ -96,10 +96,8 @@ static SensorColor ReadColor(uint32_t now_ms)
     {
         return SENSOR_COLOR_UNKNOWN;
     }
-    RGB_normalize(&rgb);
     RGBtoHSL(&rgb, &hsl);
-    if ((hsl.h <= 30U) || (hsl.h >= 330U)) raw = DRIVER_COLOR_RED;
-    else if ((hsl.h >= 80U) && (hsl.h <= 160U)) raw = DRIVER_COLOR_GREEN;
+    raw = DriverAlgorithms_ClassifyColor(hsl.h, hsl.s);
     confirmed = DriverAlgorithms_ConfirmColor(&color_confirm, raw, 3U);
     if (confirmed == DRIVER_COLOR_RED)
     {

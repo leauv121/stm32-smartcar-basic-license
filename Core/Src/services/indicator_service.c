@@ -55,6 +55,12 @@ IndicatorOutput IndicatorService_Update(uint32_t now_ms)
             output.active = 1U;
             break;
 
+        case INDICATOR_BOTH_ON:
+            output.left_on = 1U;
+            output.right_on = 1U;
+            output.active = 1U;
+            break;
+
         case INDICATOR_OFF:
         default:
             break;

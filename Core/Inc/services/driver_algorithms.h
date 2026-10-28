@@ -30,6 +30,8 @@ uint8_t DriverAlgorithms_IsTimedOut(uint32_t sample_ms,
                                     uint32_t now_ms,
                                     uint32_t timeout_ms);
 uint8_t DriverAlgorithms_LineDigitalIsBlack(uint8_t raw_level);
+DriverColor DriverAlgorithms_ClassifyColor(uint16_t hue,
+                                           uint8_t saturation);
 DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
                                           DriverColor sample,
                                           uint8_t required_count);
