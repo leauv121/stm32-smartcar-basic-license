@@ -20,3 +20,4 @@
 14. [2026-10-28：红牌快速确认与绿牌严格放行](2026-10-28-traffic-color-response-tuning.md)
 15. [2026-10-28：循迹原始数据串口遥测](2026-10-28-line-telemetry-supercom.md)
 16. [2026-10-28：normal 模式外侧传感器渐进 PID 辅助](2026-10-28-normal-outer-pid-assist.md)
+17. [2026-11-07：GitHub 简历作品集发布设计](2026-11-07-github-portfolio-release.md)

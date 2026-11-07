@@ -6,8 +6,8 @@
 
 ## 当前证据
 
-- 工作目录：`D:\dev\final-work`。
-- 开发分支：`codex/final-work-framework`。
+- 工作目录：独立工程目录。
+- 开发方式：在独立开发分支中完成，避免影响旧版基线工程。
 - 原工程只作为克隆来源，不在本次工作中修改。
 - 已建立配置、控制、服务、应用和硬件适配分层。
 - 已接入循迹 ADC、MPU6050 DMP、轮速、颜色、超声波、OLED、左右灯、USER 按键和 USART3。
@@ -16,8 +16,9 @@
 
 ## 设计依据
 
-- `docs/superpowers/specs/2026-10-22-final-work-architecture-design.md`
-- `docs/superpowers/plans/2026-10-22-final-work-framework.md`
+- 配置、控制、服务、应用与硬件适配分层。
+- 任务状态机只产生运动请求，安全仲裁后才能写入电机输出。
+- 重大修改通过本目录的变更记录保留问题、证据与验证边界。
 
 ## 验证记录
 
@@ -34,7 +35,7 @@
 powershell -ExecutionPolicy Bypass -File tests\run_native_tests.ps1
 powershell -ExecutionPolicy Bypass -File tests\check_source_boundaries.ps1
 powershell -ExecutionPolicy Bypass -File tools\check_utf8.ps1
-& 'D:\Keil_v5\UV4\UV4.exe' -r 'D:\dev\final-work\MDK-ARM\timer_pwm.uvprojx' -t 'timer_pwm' -o 'D:\dev\final-work\MDK-ARM\final-work-rebuild.log'
+# 打开 MDK-ARM/timer_pwm.uvprojx，选择 timer_pwm 并执行 Rebuild
 ```
 
 ## 尚未验证

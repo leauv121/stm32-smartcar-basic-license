@@ -3,7 +3,7 @@
 ## 现象
 
 `final-work` 在加入自适应速度和弯道 PID 后，实车循迹明显差于参考工程
-`D:\dev\stm32_projects\timer_pwm_4_4`。尤其在外侧数字探头已经检测到黑线时，
+旧版基线工程。尤其在外侧数字探头已经检测到黑线时，
 车辆仍可能保持两轮近似等速并继续向赛道外侧行驶。
 
 ## 证据与根因
@@ -51,8 +51,7 @@
 
 ## 工具环境
 
-- MinGW GCC `16.1.0` 安装在
-  `C:\Users\OOO\tools\mingw-16.1.0\mingw64`。
+- MinGW GCC `16.1.0` 已加入 `PATH`。
 - 下载文件 SHA-256 为
   `ecaceb42639d21c695f875800a29b2dea76bbb05eb2a1cca3049b65499b8d867`，
   与 Chocolatey `mingw 16.1.0` 包声明的校验值一致。
