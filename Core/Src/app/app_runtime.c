@@ -5,7 +5,9 @@
 
 #include "adc.h"
 #include "app/app_controller.h"
+#if 0 /* 基础版固件不使用高级路线检测。 */
 #include "app/route_detector.h"
+#endif
 #include "config/app_config.h"
 #include "config/car_parameters.h"
 #include "control/line_follow_control.h"
@@ -21,6 +23,7 @@
 #include "services/error_manager.h"
 #include "services/hardware_adapter.h"
 #include "services/indicator_service.h"
+#include "services/line_telemetry.h"
 #include "services/safety_service.h"
 #include "services/scheduler.h"
 #include "services/self_test.h"
@@ -53,7 +56,9 @@ static float roll;
 static float yaw;
 static int16_t line_target_left;
 static int16_t line_target_right;
+static int32_t line_pid_output;
 static char line_mode;
+static uint8_t line_telemetry_header_sent;
 
 static char LineFollowModeText(LineFollowMode mode)
 {
@@ -98,7 +103,7 @@ static SensorColor ReadColor(uint32_t now_ms)
     }
     RGBtoHSL(&rgb, &hsl);
     raw = DriverAlgorithms_ClassifyColor(hsl.h, hsl.s);
-    confirmed = DriverAlgorithms_ConfirmColor(&color_confirm, raw, 3U);
+    confirmed = DriverAlgorithms_ConfirmTrafficColor(&color_confirm, raw);
     if (confirmed == DRIVER_COLOR_RED)
     {
         SensorService_UpdateColor(SENSOR_COLOR_RED, now_ms);
@@ -114,6 +119,7 @@ static SensorColor ReadColor(uint32_t now_ms)
     return SensorService_GetSnapshot()->color.value;
 }
 
+#if 0 /* 基础版固件不生成高级路线事件。 */
 static RouteEvent DetectRouteEvent(void)
 {
     const SensorSnapshot *sensor = SensorService_GetSnapshot();
@@ -140,6 +146,7 @@ static RouteEvent DetectRouteEvent(void)
     }
     return RouteDetector_Update(&input);
 }
+#endif
 
 static void UpdateDisplay(const AppOutput *app_output, uint32_t now_ms)
 {
@@ -199,12 +206,16 @@ void AppRuntime_Init(void)
     SafetyService_Init();
     IndicatorService_Init();
     SensorService_Init();
+#if 0 /* 基础版固件不初始化高级路线检测。 */
     RouteDetector_Init();
+#endif
     LineFollowControl_Reset();
     line_reacquired_pending = 0U;
     line_target_left = 0;
     line_target_right = 0;
+    line_pid_output = 0;
     line_mode = 'P';
+    line_telemetry_header_sent = 0U;
     TB6612_Init();
     MotionControl_Apply(SafetyService_Resolve(MotionRequest_Stop(), 0U, 0U));
     AppController_Init();
@@ -325,13 +336,12 @@ void AppRuntime_RunOnce(void)
         }
         else
         {
-            UartCommandService_SendText("SELF TEST OK: SET MODE THEN START\r\n");
+            UartCommandService_SendText("SELF TEST OK: PRESS USER OR SEND START\r\n");
         }
     }
 
     yaw_required = (uint8_t)((AppController_GetState() == APP_STATE_RUNNING) &&
-        ((AppController_GetMode() != APP_MODE_NORMAL) ||
-         (NormalMission_GetState() == NORMAL_AVOID_TURN)));
+        (NormalMission_GetState() == NORMAL_AVOID_TURN));
     SensorService_CheckTimeouts(now_ms, yaw_required);
     app_input.self_test_complete = SelfTest_IsComplete();
     app_input.self_test_safe = SelfTest_IsSafeToRun();
@@ -388,18 +398,23 @@ void AppRuntime_RunOnce(void)
         }
     }
     app_input.normal.fatal_error = ErrorManager_HasFatal();
+#if 0 /* 基础版固件不填充高级任务输入。 */
     app_input.advanced.route_event = DetectRouteEvent();
     app_input.advanced.fatal_error = ErrorManager_HasFatal();
+#endif
 
     app_output = AppController_Update(&app_input, now_ms);
     if ((previous_state != APP_STATE_RUNNING) &&
         (app_output.state == APP_STATE_RUNNING))
     {
+#if 0 /* 基础版固件不重置高级路线检测。 */
         RouteDetector_Reset();
+#endif
         LineFollowControl_Reset();
         obstacle_hold_started_ms = 0U;
         avoid_turn_started = 0U;
         line_reacquired_pending = 0U;
+        line_telemetry_header_sent = 0U;
     }
     requested = app_output.motion;
     if ((NormalMission_GetState() == NORMAL_REACQUIRE_LINE) &&
@@ -419,6 +434,7 @@ void AppRuntime_RunOnce(void)
         requested.right_target = line_output.right_target;
         line_target_left = line_output.left_target;
         line_target_right = line_output.right_target;
+        line_pid_output = line_output.pid_output;
         line_mode = LineFollowModeText(line_output.mode);
         line_reacquired_pending = (uint8_t)(line_output.mode == LINE_FOLLOW_PID);
         if (line_output.mode == LINE_FOLLOW_FAULT)
@@ -439,6 +455,7 @@ void AppRuntime_RunOnce(void)
         requested.right_target = line_output.right_target;
         line_target_left = line_output.left_target;
         line_target_right = line_output.right_target;
+        line_pid_output = line_output.pid_output;
         line_mode = LineFollowModeText(line_output.mode);
         line_reacquired_pending = 0U;
         if (line_output.mode == LINE_FOLLOW_FAULT)
@@ -464,6 +481,36 @@ void AppRuntime_RunOnce(void)
     }
     indicator_output = IndicatorService_Update(now_ms);
     ApplyIndicators(indicator_output);
+
+    if ((events.tick_50ms != 0U) &&
+        (app_output.state == APP_STATE_RUNNING) &&
+        (app_output.mode == APP_MODE_NORMAL) &&
+        (requested.mode == MOTION_DRIVE) && sensor->line.valid)
+    {
+        LineTelemetrySample sample = {
+            now_ms,
+            sensor->line.left_adc,
+            sensor->line.right_adc,
+            sensor->line.outer_right,
+            sensor->line.outer_left,
+            line_pid_output,
+            line_target_left,
+            line_target_right,
+            line_mode
+        };
+        char text[96];
+
+        if (line_telemetry_header_sent == 0U)
+        {
+            UartCommandService_SendText(
+                "LF,time,left_adc,right_adc,outer_r,outer_l,pid,left_pwm,right_pwm,mode\r\n");
+            line_telemetry_header_sent = 1U;
+        }
+        if (LineTelemetry_Format(&sample, text, sizeof(text)) > 0)
+        {
+            UartCommandService_SendText(text);
+        }
+    }
 
     if (events.tick_200ms != 0U)
     {

@@ -79,6 +79,22 @@ DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
     return state->emitted;
 }
 
+DriverColor DriverAlgorithms_ConfirmTrafficColor(ColorConfirmState *state,
+                                                 DriverColor sample)
+{
+    uint8_t required_count = 0U;
+
+    if (sample == DRIVER_COLOR_RED)
+    {
+        required_count = 2U;
+    }
+    else if (sample == DRIVER_COLOR_GREEN)
+    {
+        required_count = 5U;
+    }
+    return DriverAlgorithms_ConfirmColor(state, sample, required_count);
+}
+
 void DriverAlgorithms_KeyInit(KeyDebounceState *state,
                               uint8_t initial_level,
                               uint32_t now_ms)

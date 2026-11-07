@@ -45,32 +45,32 @@ void MotionControl_Apply(MotionRequest request)
 /* 直接编译兼容层源码，防止它与新控制器再次分叉。 */
 #include "../../Core/Src/car_control.c"
 
-static void test_legacy_pid_uses_filtered_controller(void)
+static void test_legacy_pid_uses_weighted_position_controller(void)
 {
     Line_Following_PID_Reset();
-    Line_Following_PID_Prime(2000U, 2000U);
-    Line_Following_PID(2000U, 2200U);
+    Line_Following_PID_Prime(3500U, 3500U);
+    Line_Following_PID(150U, 3500U);
 
-    TEST_ASSERT_EQ_INT(250, Line_Following_PID_GetOutput());
-    TEST_ASSERT_EQ_INT(2110, captured_motion.left_target);
-    TEST_ASSERT_EQ_INT(1610, captured_motion.right_target);
+    TEST_ASSERT_TRUE(Line_Following_PID_GetOutput() > 0);
+    TEST_ASSERT_TRUE(captured_motion.left_target > captured_motion.right_target);
 }
 
-static void test_legacy_hybrid_uses_baseline_outer_rescue(void)
+static void test_legacy_hybrid_uses_outer_probe_immediately(void)
 {
     fake_outer_right = GPIO_PIN_SET;
     fake_outer_left = GPIO_PIN_RESET;
 
     Line_Following_PID_Reset();
-    Line_Following_Hybrid(2000U, 2000U);
-    TEST_ASSERT_EQ_INT('R', Line_Following_Get_Mode());
-    TEST_ASSERT_EQ_INT(4500, captured_motion.left_target);
-    TEST_ASSERT_EQ_INT(1400, captured_motion.right_target);
+    Line_Following_Hybrid(150U, 150U);
+    TEST_ASSERT_EQ_INT('N', Line_Following_Get_Mode());
+    TEST_ASSERT_TRUE(Line_Following_PID_GetOutput() > 0);
+    TEST_ASSERT_TRUE(captured_motion.left_target > captured_motion.right_target);
+    TEST_ASSERT_TRUE(captured_motion.left_target != CAR_LINE_RESCUE_OUTER_SPEED);
 }
 
 int main(void)
 {
-    test_legacy_pid_uses_filtered_controller();
-    test_legacy_hybrid_uses_baseline_outer_rescue();
+    test_legacy_pid_uses_weighted_position_controller();
+    test_legacy_hybrid_uses_outer_probe_immediately();
     return test_failures;
 }

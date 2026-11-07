@@ -4,6 +4,7 @@
 int main(void)
 {
     ColorConfirmState color = {0};
+    ColorConfirmState traffic_color = {0};
     KeyDebounceState key = {0};
 
     /* 原车四路循迹模块的 DO 输出：高电平表示检测到黑线。 */
@@ -48,6 +49,29 @@ int main(void)
                        DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_GREEN, 3U));
     TEST_ASSERT_EQ_INT(DRIVER_COLOR_GREEN,
                        DriverAlgorithms_ConfirmColor(&color, DRIVER_COLOR_GREEN, 3U));
+
+    /* 红牌两帧确认，绿牌五帧确认；绿色确认期间继续保持红牌状态。 */
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_NONE,
+                       DriverAlgorithms_ConfirmTrafficColor(&traffic_color,
+                                                            DRIVER_COLOR_RED));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmTrafficColor(&traffic_color,
+                                                            DRIVER_COLOR_RED));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmTrafficColor(&traffic_color,
+                                                            DRIVER_COLOR_GREEN));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmTrafficColor(&traffic_color,
+                                                            DRIVER_COLOR_GREEN));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmTrafficColor(&traffic_color,
+                                                            DRIVER_COLOR_GREEN));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_RED,
+                       DriverAlgorithms_ConfirmTrafficColor(&traffic_color,
+                                                            DRIVER_COLOR_GREEN));
+    TEST_ASSERT_EQ_INT(DRIVER_COLOR_GREEN,
+                       DriverAlgorithms_ConfirmTrafficColor(&traffic_color,
+                                                            DRIVER_COLOR_GREEN));
 
     DriverAlgorithms_KeyInit(&key, 0U, 0U);
     TEST_ASSERT_TRUE(!DriverAlgorithms_KeyUpdate(&key, 1U, 5U, 20U));

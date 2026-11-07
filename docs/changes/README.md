@@ -16,3 +16,7 @@
 10. [2026-10-26：恢复已验证循迹基线](2026-10-26-baseline-line-follow-migration.md)
 11. [2026-10-28：普通模式掉头提速与角度调整](2026-10-28-normal-turn-speed-tuning.md)
 12. [2026-10-28：红牌停车锁存与双灯常亮](2026-10-28-normal-red-wait-color-fix.md)
+13. [2026-10-28：普通循迹 3800 试验与回退](2026-10-28-normal-speed-3800-tuning.md)
+14. [2026-10-28：红牌快速确认与绿牌严格放行](2026-10-28-traffic-color-response-tuning.md)
+15. [2026-10-28：循迹原始数据串口遥测](2026-10-28-line-telemetry-supercom.md)
+16. [2026-10-28：normal 模式外侧传感器渐进 PID 辅助](2026-10-28-normal-outer-pid-assist.md)

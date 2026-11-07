@@ -9,34 +9,31 @@ static AppMode selected_mode;
 
 static uint8_t IsMissionMode(AppMode mode)
 {
-    return (uint8_t)((mode >= APP_MODE_NORMAL) && (mode <= APP_MODE_CHALLENGE));
+    return (uint8_t)(mode == APP_MODE_NORMAL);
 }
 
 static void StopMission(void)
 {
     NormalMission_Stop();
+#if 0 /* 基础版固件不进入高级任务，保留源码便于以后恢复。 */
     AdvancedMission_Stop();
+#endif
 }
 
 static void StartMission(uint32_t now_ms)
 {
-    if (selected_mode == APP_MODE_NORMAL)
-    {
-        NormalMission_Start(now_ms);
-    }
-    else
-    {
-        AdvancedMission_Start(selected_mode, now_ms);
-    }
+    NormalMission_Start(now_ms);
     app_state = APP_STATE_RUNNING;
 }
 
 void AppController_Init(void)
 {
     app_state = APP_STATE_SELF_TEST;
-    selected_mode = APP_MODE_NONE;
+    selected_mode = APP_MODE_NORMAL;
     NormalMission_Init();
+#if 0 /* 基础版固件不初始化高级任务。 */
     AdvancedMission_Init();
+#endif
 }
 
 AppState AppController_GetState(void)
@@ -88,10 +85,6 @@ static void ProcessCommand(const AppCommand *command, uint8_t stop_latched,
             else if (stop_latched != 0U)
             {
                 output->command_result = APP_RESULT_ACK_REQUIRED;
-            }
-            else if (selected_mode == APP_MODE_NONE)
-            {
-                output->command_result = APP_RESULT_MODE_REQUIRED;
             }
             else if (app_state != APP_STATE_WAIT)
             {
@@ -186,7 +179,7 @@ AppOutput AppController_Update(const AppInput *input, uint32_t now_ms)
             StopMission();
             app_state = APP_STATE_WAIT;
         }
-        else if ((app_state == APP_STATE_WAIT) && (selected_mode != APP_MODE_NONE) &&
+        else if ((app_state == APP_STATE_WAIT) &&
                  (input->stop_latched == 0U) &&
                  (ErrorManager_HasFatal() == 0U))
         {
@@ -196,14 +189,10 @@ AppOutput AppController_Update(const AppInput *input, uint32_t now_ms)
 
     if (app_state == APP_STATE_RUNNING)
     {
-        if (selected_mode == APP_MODE_NORMAL)
-        {
-            mission = NormalMission_Update(&input->normal, now_ms);
-        }
-        else
-        {
-            mission = AdvancedMission_Update(&input->advanced, now_ms);
-        }
+        mission = NormalMission_Update(&input->normal, now_ms);
+#if 0 /* 基础版固件不调度高级任务。 */
+        mission = AdvancedMission_Update(&input->advanced, now_ms);
+#endif
 
         output.motion = mission.motion;
         output.indicator = mission.indicator;

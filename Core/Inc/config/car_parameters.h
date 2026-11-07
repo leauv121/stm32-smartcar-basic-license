@@ -10,17 +10,25 @@
 /* TIM2 自动重装值为 7199，因此有效 PWM 范围为 0～7199。 */
 #define CAR_PWM_MAX                       7199
 
-/* 当前实车循迹基线参数，后续只在本文件集中标定。 */
-#define CAR_LINE_PID_KP                   1.0f
-#define CAR_LINE_PID_KI                   0.0f
-#define CAR_LINE_PID_KD                   0.5f
+/* 四探头统一位置控制，参数沿用参考工程的归一化误差单位。 */
+#define CAR_LINE_SENSOR_WHITE_ADC          150U
+#define CAR_LINE_SENSOR_BLACK_ADC         3500U
+#define CAR_LINE_SENSOR_LEVEL_MAX         1000.0f
+#define CAR_LINE_SENSOR_NOISE_FLOOR         80.0f
+#define CAR_LINE_SENSOR_DETECT_LEVEL       250.0f
+#define CAR_LINE_POSITION_KP                 0.12f
+#define CAR_LINE_POSITION_KI                 0.0f
+#define CAR_LINE_POSITION_KD                 0.0025f
+#define CAR_LINE_POSITION_INTEGRAL_LIMIT      0.5f
+#define CAR_LINE_CORRECTION_PWM_PER_MPS    10000.0f
+#define CAR_LINE_CORRECTION_MAX_PWM        3000
+#define CAR_LINE_CORNER_ERROR_THRESHOLD       1.0f
 #define CAR_LINE_PID_START_SPEED          1800
-#define CAR_LINE_PID_BASE_SPEED           3700
+#define CAR_LINE_PID_BASE_SPEED           5000
+#define CAR_LINE_CORNER_BASE_SPEED        5000
 #define CAR_LINE_PID_MAX_SPEED            6500
-#define CAR_LINE_PID_INTEGRAL_LIMIT       8000
-#define CAR_LINE_PID_ERROR_DEADBAND         60
-#define CAR_LINE_PID_SOFT_START_STEP        60
-/* 第一阶段使用已通过实车验证的固定差速救线参数。 */
+#define CAR_LINE_PID_SOFT_START_STEP        100
+/* 掉头后的强制找线仍使用固定低速差速。 */
 #define CAR_LINE_RESCUE_OUTER_SPEED        4500
 #define CAR_LINE_RESCUE_INNER_SPEED        1400
 #define CAR_LINE_REACQUIRE_OUTER_SPEED     2400

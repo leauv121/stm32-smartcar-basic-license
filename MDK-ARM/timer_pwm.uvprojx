@@ -810,6 +810,11 @@
               <FilePath>../Core/Src/services/uart_command_service.c</FilePath>
             </File>
             <File>
+              <FileName>line_telemetry.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/services/line_telemetry.c</FilePath>
+            </File>
+            <File>
               <FileName>app_controller.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/app/app_controller.c</FilePath>

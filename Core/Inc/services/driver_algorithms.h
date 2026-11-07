@@ -35,6 +35,8 @@ DriverColor DriverAlgorithms_ClassifyColor(uint16_t hue,
 DriverColor DriverAlgorithms_ConfirmColor(ColorConfirmState *state,
                                           DriverColor sample,
                                           uint8_t required_count);
+DriverColor DriverAlgorithms_ConfirmTrafficColor(ColorConfirmState *state,
+                                                 DriverColor sample);
 void DriverAlgorithms_KeyInit(KeyDebounceState *state,
                               uint8_t initial_level,
                               uint32_t now_ms);
